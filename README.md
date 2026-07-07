@@ -1,25 +1,37 @@
-# CODING AGENTS: READ THIS FIRST
+# 언제볼까 — 회의 시간 조율 도구
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+타임테이블 히트맵 기반 회의 시간 조율 MVP. 생성자가 투표를 만들어 링크를 공유하면,
+참가자들은 서로의 응답을 보지 못한 채 각자 가능한 시간을 표시하고, 생성자는 히트맵과
+추천 시간 후보를 바탕으로 최종 회의 시간을 확정합니다.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+## 구조
 
-## What you should do — IMPORTANT
+- `server/` — Express + SQLite API. 투표/응답 데이터를 저장해 참가자별로 다른 기기에서도
+  같은 링크로 접속할 수 있게 합니다.
+- `client/` — React + TypeScript + Vite 프런트엔드.
+- `project/`, `chats/` — Claude Design에서 내보낸 원본 디자인 프로토타입(참고용, 실행 대상 아님).
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+## 실행 방법
 
-**Read `project/언제볼까 MVP.dc.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+두 개의 터미널에서 각각 실행합니다.
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```bash
+cd server
+npm install
+npm run dev      # http://localhost:8787
+```
 
-## About the design files
+```bash
+cd client
+npm install
+npm run dev       # http://localhost:5173 (개발 서버가 /api를 8787로 프록시)
+```
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+브라우저에서 `http://localhost:5173`을 엽니다.
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+## 프로덕션 빌드
 
-## Bundle contents
-
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `MVP 제작 명세서` project files (HTML prototypes, assets, components)
+```bash
+cd server && npm run build && npm start
+cd client && npm run build && npm run preview
+```
