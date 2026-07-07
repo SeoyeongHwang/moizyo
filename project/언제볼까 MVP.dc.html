@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta charset="utf-8">
+<title>언제볼까 — 회의 시간 조율</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f6f5f4;font-family:Inter,-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;color:rgba(0,0,0,0.95)}
+*{box-sizing:border-box}
+input,select,textarea,button{font-family:inherit}
+a{color:#0075de;text-decoration:none}
+a:hover{color:#005bab;text-decoration:underline}
+::placeholder{color:#a39e98}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-direction:column">
+
+  <div style="background:#ffffff;border-bottom:1px solid #e6e6e6;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:26px;height:26px;border-radius:6px;background:#0075de;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">언</div>
+      <div style="font-weight:700;font-size:16px;letter-spacing:-0.25px">언제볼까</div>
+      <div style="font-size:12px;font-weight:600;color:#0075de;background:#ffffff;border:1px solid #e6e6e6;border-radius:9999px;padding:3px 10px;letter-spacing:0.125px">{{ roleBadge }}</div>
+    </div>
+    <button onClick="{{ onReset }}" style="background:#ffffff;border:1px solid #e6e6e6;border-radius:8px;padding:4px 14px;font-size:14px;font-weight:500;color:rgba(0,0,0,0.85);cursor:pointer" style-hover="background:#f6f5f4">새 투표 만들기</button>
+  </div>
+
+  <sc-if value="{{ isCreate }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="투표 생성" style="flex:1;display:flex;justify-content:center;padding:48px 20px 80px">
+    <div style="width:100%;max-width:640px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#0075de;background:#fff;border:1px solid #e6e6e6;border-radius:9999px;padding:4px 10px;display:inline-block;margin-bottom:14px">STEP 1 · 투표 생성</div>
+      <div style="font-size:40px;font-weight:700;line-height:1.1;letter-spacing:-1px;margin-bottom:10px;text-wrap:pretty">모두가 만족하는<br>회의 시간을 찾아보세요</div>
+      <div style="font-size:16px;line-height:1.5;color:#615d59;margin-bottom:28px">참가자의 솔직한 선호를 모아 히트맵으로 보여주고, 최적의 시간을 추천해 드립니다.</div>
+
+      <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">이벤트 종류</label>
+            <select value="{{ fType }}" data-f="fType" onChange="{{ onField }}" style="border:1px solid #dddddd;border-radius:4px;padding:8px;font-size:15px;background:#fff;color:rgba(0,0,0,0.9)">
+              <option value="프로젝트 킥오프">프로젝트 킥오프</option>
+              <option value="팀 회의">팀 회의</option>
+              <option value="1:1 미팅">1:1 미팅</option>
+              <option value="워크숍">워크숍</option>
+              <option value="회식 / 모임">회식 / 모임</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">소요 시간</label>
+            <select value="{{ fDur }}" data-f="fDur" onChange="{{ onField }}" style="border:1px solid #dddddd;border-radius:4px;padding:8px;font-size:15px;background:#fff;color:rgba(0,0,0,0.9)">
+              <option value="30">30분</option>
+              <option value="60">1시간</option>
+              <option value="90">1시간 30분</option>
+              <option value="120">2시간</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">회의 목적</label>
+          <input value="{{ fPurpose }}" data-f="fPurpose" onChange="{{ onField }}" placeholder="예: 새 프로젝트의 전체 계획 및 일정 수립" style="border:1px solid #dddddd;border-radius:4px;padding:8px;font-size:15px;color:rgba(0,0,0,0.9)">
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">조사 날짜 <span style="font-weight:400;color:#a39e98">— 여러 날짜 선택 가능</span></label>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{ dateChips }}" as="c" hint-placeholder-count="7">
+              <button data-key="{{ c.key }}" onClick="{{ toggleDate }}" style="{{ c.st }}">{{ c.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">조사 시작 시간</label>
+            <select value="{{ fStart }}" data-f="fStart" onChange="{{ onField }}" style="border:1px solid #dddddd;border-radius:4px;padding:8px;font-size:15px;background:#fff;color:rgba(0,0,0,0.9)">
+              <option value="7">07:00</option><option value="8">08:00</option><option value="9">09:00</option><option value="10">10:00</option><option value="11">11:00</option><option value="12">12:00</option><option value="13">13:00</option><option value="14">14:00</option><option value="15">15:00</option><option value="16">16:00</option>
+            </select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">조사 종료 시간</label>
+            <select value="{{ fEnd }}" data-f="fEnd" onChange="{{ onField }}" style="border:1px solid #dddddd;border-radius:4px;padding:8px;font-size:15px;background:#fff;color:rgba(0,0,0,0.9)">
+              <option value="12">12:00</option><option value="13">13:00</option><option value="14">14:00</option><option value="15">15:00</option><option value="16">16:00</option><option value="17">17:00</option><option value="18">18:00</option><option value="19">19:00</option><option value="20">20:00</option><option value="21">21:00</option><option value="22">22:00</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid #e6e6e6;padding-top:20px">
+          <div style="font-size:14px;color:#dd5b00;min-height:20px">{{ createErr }}</div>
+          <button onClick="{{ onCreate }}" style="{{ createBtnSt }}">투표 생성하기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isCreated }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="링크 공유" style="flex:1;display:flex;justify-content:center;padding:48px 20px 80px">
+    <div style="width:100%;max-width:640px">
+      <div style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#0075de;background:#fff;border:1px solid #e6e6e6;border-radius:9999px;padding:4px 10px;display:inline-block;margin-bottom:14px">STEP 2 · 링크 공유</div>
+      <div style="font-size:40px;font-weight:700;line-height:1.1;letter-spacing:-1px;margin-bottom:10px">투표가 생성되었습니다</div>
+      <div style="font-size:16px;line-height:1.5;color:#615d59;margin-bottom:28px">아래 링크를 팀 채팅방에 공유하세요. 참가자의 응답은 서로에게 보이지 않습니다.</div>
+
+      <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:20px;font-weight:600;letter-spacing:-0.125px">{{ pollTitle }}</div>
+          <div style="font-size:14px;color:#615d59">{{ pollRange }}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <div style="flex:1;border:1px solid #dddddd;border-radius:4px;padding:9px 12px;font-size:15px;color:#31302e;background:#f6f5f4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ pollLink }}</div>
+          <button onClick="{{ onCopyLink }}" style="background:#ffffff;border:1px solid #e6e6e6;border-radius:8px;padding:4px 14px;font-size:15px;font-weight:500;cursor:pointer" style-hover="background:#f6f5f4">복사</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:9999px;background:#1aae39"></div>
+          <div style="font-size:14px;color:#615d59">{{ respCountText }}</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid #e6e6e6;padding-top:20px">
+          <button onClick="{{ goJoin }}" style="background:#0075de;color:#fff;border:none;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#005bab" style-active="transform:scale(0.96)">참가자로 응답하기</button>
+          <button onClick="{{ goResults }}" style="background:#ffffff;color:rgba(0,0,0,0.9);border:1px solid #e6e6e6;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.04)" style-hover="background:#f6f5f4">결과 보기 (생성자)</button>
+          <button onClick="{{ onSeed }}" style="{{ seedSt }}" style-hover="background:#f6f5f4">데모 응답 7명 채우기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isJoin }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="참가자 입장" style="flex:1;display:flex;justify-content:center;padding:64px 20px 80px">
+    <div style="width:100%;max-width:440px">
+      <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:16px;box-shadow:0 1px 3px rgba(0,0,0,0.03),0 4px 18px rgba(0,0,0,0.04)">
+        <div>
+          <div style="font-size:26px;font-weight:700;letter-spacing:-0.625px;line-height:1.23;margin-bottom:6px">{{ pollTitle }}</div>
+          <div style="font-size:14px;color:#615d59;line-height:1.43">{{ pollPurposeLine }}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">이름</label>
+          <input value="{{ joinName }}" data-f="joinName" onChange="{{ onField }}" onKeyDown="{{ joinKey }}" placeholder="이름을 입력하세요" style="border:1px solid #dddddd;border-radius:4px;padding:9px;font-size:15px;color:rgba(0,0,0,0.9)">
+          <div style="{{ joinErrSt }}">{{ joinErr }}</div>
+        </div>
+        <button onClick="{{ onJoin }}" style="background:#0075de;color:#fff;border:none;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#005bab" style-active="transform:scale(0.96)">계속하기</button>
+        <div style="font-size:13px;color:#a39e98;line-height:1.45">다른 참가자의 응답은 입력이 끝날 때까지 표시되지 않아요. 눈치 보지 말고 솔직하게 입력해 주세요.</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isRespond }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="시간 입력" style="flex:1;display:flex;justify-content:center;padding:36px 20px 80px">
+    <div style="width:100%;max-width:820px">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="font-size:26px;font-weight:700;letter-spacing:-0.625px">{{ curName }}님의 가능 시간</div>
+        <div style="font-size:14px;color:#615d59">{{ pollRange }}</div>
+      </div>
+      <div style="font-size:14px;color:#615d59;margin-bottom:18px">드래그해서 시간을 칠해 주세요. 표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.</div>
+
+      <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+          <div style="display:flex;border:1px solid #e6e6e6;border-radius:8px;overflow:hidden">
+            <button onClick="{{ setCatBest }}" style="{{ catBestSt }}">가장 좋은 시간</button>
+            <button onClick="{{ setCatOk }}" style="{{ catOkSt }}">가능하지만 비선호</button>
+          </div>
+          <div style="display:flex;gap:14px;font-size:13px;color:#615d59;align-items:center">
+            <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#1aae39"></div>선호</div>
+            <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#f0b429"></div>비선호</div>
+            <div style="display:flex;align-items:center;gap:5px"><div style="width:12px;height:12px;border-radius:3px;background:#f6f5f4;border:1px solid #e6e6e6"></div>불가능</div>
+          </div>
+        </div>
+
+        <div style="user-select:none;touch-action:none" onMouseDown="{{ gridDown }}" onMouseOver="{{ gridOver }}" onTouchStart="{{ gridTouch }}" onTouchMove="{{ gridTouch }}">
+          <div style="display:flex;margin-bottom:4px">
+            <div style="width:52px;flex:none"></div>
+            <sc-for list="{{ dateHead }}" as="h" hint-placeholder-count="3">
+              <div style="flex:1;text-align:center;font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">{{ h.label }}</div>
+            </sc-for>
+          </div>
+          <sc-for list="{{ rRows }}" as="row" hint-placeholder-count="8">
+            <div style="display:flex">
+              <div style="width:52px;flex:none;font-size:11px;color:#a39e98;text-align:right;padding-right:8px;transform:translateY(-6px)">{{ row.label }}</div>
+              <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="3">
+                <div data-key="{{ cell.key }}" style="{{ cell.st }}"></div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #e6e6e6;padding-top:16px">
+          <div style="font-size:14px;color:#615d59">{{ markedText }}</div>
+          <button onClick="{{ onSubmitResp }}" style="{{ submitBtnSt }}">응답 제출하기</button>
+        </div>
+      </div>
+      <div style="margin-top:14px;font-size:13px;color:#a39e98;display:flex;align-items:center;gap:8px">
+        <div style="width:8px;height:8px;border-radius:9999px;background:#d6b6f6"></div>
+        다른 참가자의 응답과 응답 현황은 제출 전까지 표시되지 않습니다.
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isSubmitted }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="제출 완료" style="flex:1;display:flex;justify-content:center;padding:80px 20px">
+    <div style="width:100%;max-width:440px;text-align:center">
+      <div style="width:56px;height:56px;border-radius:9999px;background:rgba(26,174,57,0.12);color:#1aae39;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 18px">✓</div>
+      <div style="font-size:26px;font-weight:700;letter-spacing:-0.625px;margin-bottom:8px">응답이 제출되었습니다</div>
+      <div style="font-size:15px;color:#615d59;line-height:1.5;margin-bottom:24px">{{ curName }}님의 응답이 저장되었어요.<br>이제 전체 응답 현황을 확인할 수 있습니다.</div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button onClick="{{ goResults }}" style="background:#0075de;color:#fff;border:none;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#005bab">결과 보기</button>
+        <button onClick="{{ goJoin }}" style="background:#ffffff;color:rgba(0,0,0,0.9);border:1px solid #e6e6e6;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#f6f5f4">다른 이름으로 응답</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isResults }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="결과 히트맵" style="flex:1;display:flex;justify-content:center;padding:36px 20px 100px">
+    <div style="width:100%;max-width:1060px">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px">
+        <div style="font-size:26px;font-weight:700;letter-spacing:-0.625px">응답 결과</div>
+        <div style="font-size:14px;color:#615d59">{{ pollTitle }} · {{ respCountText }}</div>
+      </div>
+      <div style="font-size:14px;color:#615d59;margin-bottom:20px">색이 진할수록 가능한 사람이 많은 시간입니다. 블록에 마우스를 올리거나 탭하면 상세 명단이 보입니다.</div>
+
+      <sc-if value="{{ hasResponses }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+
+        <div style="flex:2 1 480px;background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:20px">
+          <div onMouseOver="{{ heatOver }}" onClick="{{ heatOver }}" style="user-select:none">
+            <div style="display:flex;margin-bottom:4px">
+              <div style="width:52px;flex:none"></div>
+              <sc-for list="{{ dateHead }}" as="h" hint-placeholder-count="3">
+                <div style="flex:1;text-align:center;font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59">{{ h.label }}</div>
+              </sc-for>
+            </div>
+            <sc-for list="{{ heatRows }}" as="row" hint-placeholder-count="8">
+              <div style="display:flex">
+                <div style="width:52px;flex:none;font-size:11px;color:#a39e98;text-align:right;padding-right:8px;transform:translateY(-6px)">{{ row.label }}</div>
+                <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="3">
+                  <div data-key="{{ cell.key }}" style="{{ cell.st }}">
+                    <div style="{{ cell.dotSt }}"></div>
+                    <div style="{{ cell.badgeSt }}">{{ cell.badge }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:14px;font-size:13px;color:#615d59;align-items:center;margin-top:14px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:6px"><div style="width:44px;height:10px;border-radius:3px;background:linear-gradient(90deg,#f6f5f4,#0075de)"></div>가능 인원 비율</div>
+            <div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:9999px;background:#dd5b00"></div>비선호 응답 있음</div>
+            <div style="display:flex;align-items:center;gap:5px"><div style="width:14px;height:14px;border-radius:4px;background:#fff;border:2px solid #0075de"></div>추천 1순위 구간</div>
+          </div>
+        </div>
+
+        <div style="flex:1 1 280px;display:flex;flex-direction:column;gap:20px;min-width:280px">
+          <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:20px">
+            <div style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59;margin-bottom:10px">시간 상세</div>
+            <div style="font-size:16px;font-weight:600;letter-spacing:-0.125px;margin-bottom:12px">{{ detailTitle }}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.43">
+              <div style="display:flex;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#1aae39;flex:none;margin-top:4px"></div><div><b>선호</b> · {{ detailBest }}</div></div>
+              <div style="display:flex;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#f0b429;flex:none;margin-top:4px"></div><div><b>가능(비선호)</b> · {{ detailOk }}</div></div>
+              <div style="display:flex;gap:8px"><div style="width:10px;height:10px;border-radius:3px;background:#e6e6e6;flex:none;margin-top:4px"></div><div><b>불가능</b> · {{ detailNo }}</div></div>
+            </div>
+            <div style="{{ detailWarnSt }}">{{ detailWarn }}</div>
+          </div>
+
+          <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:20px">
+            <div style="font-size:12px;font-weight:600;letter-spacing:0.125px;color:#615d59;margin-bottom:4px">참가자 · 필수 지정</div>
+            <div style="font-size:13px;color:#a39e98;margin-bottom:12px">필수 참가자가 모두 가능한 시간을 우선 추천합니다.</div>
+            <div style="display:flex;flex-direction:column">
+              <sc-for list="{{ participants }}" as="p" hint-placeholder-count="4">
+                <label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:5px;cursor:pointer;font-size:15px" style-hover="background:#f6f5f4">
+                  <input type="checkbox" checked="{{ p.checked }}" data-name="{{ p.name }}" onChange="{{ onReqToggle }}" style="accent-color:#0075de;width:16px;height:16px">
+                  <span style="flex:1">{{ p.name }}</span>
+                  <span style="{{ p.tagSt }}">필수</span>
+                </label>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #e6e6e6;border-radius:12px;padding:24px;margin-top:20px">
+        <div style="font-size:20px;font-weight:600;letter-spacing:-0.125px;margin-bottom:2px">추천 시간</div>
+        <div style="font-size:14px;color:#615d59;margin-bottom:16px">{{ recSubtitle }}</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ candList }}" as="c" hint-placeholder-count="3">
+            <div style="{{ c.rowSt }}">
+              <div style="width:28px;height:28px;border-radius:9999px;background:rgba(0,117,222,0.08);color:#0075de;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex:none">{{ c.rank }}</div>
+              <div style="flex:1;min-width:200px">
+                <div style="font-size:16px;font-weight:600;letter-spacing:-0.125px">{{ c.title }}</div>
+                <div style="font-size:14px;color:#615d59">{{ c.meta }}</div>
+                <div style="{{ c.warnSt }}">{{ c.warn }}</div>
+              </div>
+              <button data-idx="{{ c.idx }}" onClick="{{ onPick }}" style="{{ c.btnSt }}">{{ c.btnLabel }}</button>
+            </div>
+          </sc-for>
+        </div>
+        <div style="{{ noRecSt }}">필수 참가자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요.</div>
+      </div>
+
+      <div style="{{ finalSt }}">
+        <div style="font-size:20px;font-weight:600;letter-spacing:-0.125px;margin-bottom:2px">확정 안내 메시지</div>
+        <div style="font-size:14px;color:#615d59;margin-bottom:14px">자동 생성된 근거 요약입니다. 자유롭게 수정한 뒤 복사해 공유하세요.</div>
+        <textarea value="{{ msgText }}" onChange="{{ onMsgChange }}" rows="11" style="width:100%;border:1px solid #dddddd;border-radius:4px;padding:12px;font-size:14px;line-height:1.55;color:rgba(0,0,0,0.9);resize:vertical"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:12px">
+          <button onClick="{{ onCopyMsg }}" style="background:#0075de;color:#fff;border:none;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#005bab" style-active="transform:scale(0.96)">메시지 + 링크 복사</button>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ noResponses }}" hint-placeholder-val="{{ false }}">
+      <div style="background:#f6f5f4;border:1px dashed #d9d5d1;border-radius:16px;padding:48px;text-align:center">
+        <div style="font-size:16px;color:#615d59;margin-bottom:16px">아직 응답이 없습니다. 링크를 공유하거나 데모 응답을 채워 보세요.</div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button onClick="{{ goJoin }}" style="background:#0075de;color:#fff;border:none;border-radius:9999px;padding:10px 22px;font-size:16px;font-weight:500;cursor:pointer" style-hover="background:#005bab">참가자로 응답하기</button>
+          <button onClick="{{ onSeed }}" style="{{ seedSt }}" style-hover="background:#f6f5f4">데모 응답 7명 채우기</button>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <div style="{{ toastSt }}">{{ toast }}</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;slotMinutes&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;30&quot;, &quot;60&quot;], &quot;default&quot;: &quot;30&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;동작&quot;, &quot;description&quot;: &quot;타임테이블 블록 단위(분)&quot;},
+  &quot;heatScale&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;blue&quot;, &quot;traffic&quot;], &quot;default&quot;: &quot;blue&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;결과 화면&quot;, &quot;description&quot;: &quot;히트맵 색상 스케일&quot;},
+  &quot;showSeedTools&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;데모&quot;, &quot;description&quot;: &quot;데모 응답 채우기 버튼 표시&quot;}
+}">
+class Component extends DCLogic {
+  state = {
+    screen: 'create',
+    fType: '팀 회의', fPurpose: '', selDates: [], fStart: 9, fEnd: 18, fDur: 60,
+    poll: null,
+    joinName: '', joinErr: '',
+    curName: '', cat: 'best', drag: null, marks: {},
+    detailKey: null,
+    toast: '', finalIdx: -1, msgText: ''
+  };
+
+  componentDidMount() {
+    this._up = () => { if (this.state.drag) this.setState({ drag: null }); };
+    window.addEventListener('mouseup', this._up);
+    try {
+      const raw = localStorage.getItem('when_poll_v1');
+      if (raw) {
+        const poll = JSON.parse(raw);
+        if (poll && poll.id) this.setState({ poll, screen: 'created' });
+      }
+    } catch (e) {}
+  }
+  componentWillUnmount() { window.removeEventListener('mouseup', this._up); }
+
+  // ---------- helpers ----------
+  slotMin() { return Number(this.props.slotMinutes ?? 30) || 30; }
+  savePoll(poll) {
+    this.setState({ poll });
+    try { localStorage.setItem('when_poll_v1', poll ? JSON.stringify(poll) : ''); } catch (e) {}
+  }
+  showToast(msg) {
+    clearTimeout(this._tt);
+    this.setState({ toast: msg });
+    this._tt = setTimeout(() => this.setState({ toast: '' }), 2200);
+  }
+  copy(text, msg) {
+    const done = () => this.showToast(msg);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => this.copyFallback(text, done));
+    } else this.copyFallback(text, done);
+  }
+  copyFallback(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta); done();
+  }
+  fmtMin(m) { const h = Math.floor(m / 60), mm = m % 60; return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); }
+  wd(key) { const d = new Date(key + 'T00:00:00'); return '일월화수목금토'[d.getDay()]; }
+  dLabel(key) { const d = new Date(key + 'T00:00:00'); return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + this.wd(key) + ')'; }
+  dShort(key) { const d = new Date(key + 'T00:00:00'); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + this.wd(key); }
+  nextDays(n) {
+    const out = [];
+    const t = new Date();
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(t.getFullYear(), t.getMonth(), t.getDate() + i);
+      out.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+    }
+    return out;
+  }
+  slots(poll) {
+    const out = [];
+    for (let m = poll.startHour * 60; m + this.slotMin() <= poll.endHour * 60; m += this.slotMin()) out.push(m);
+    return out;
+  }
+  pollLink(poll) { return 'https://when.kr/v/' + poll.id; }
+
+  paint(key, erase) {
+    const marks = { ...this.state.marks };
+    if (erase) delete marks[key]; else marks[key] = this.state.cat;
+    this.setState({ marks });
+  }
+
+  seedDemo() {
+    const poll = this.state.poll; if (!poll) return;
+    const names = ['김지현', '박민수', '이서연', '최준호', '정다은', '한상우', '오유진'];
+    let s = 20260707;
+    const rnd = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+    const responses = { ...poll.responses };
+    const sl = this.slots(poll);
+    names.forEach((n, i) => {
+      const marks = {};
+      poll.dates.forEach((d, di) => {
+        // each person tends to have contiguous availability
+        let run = 0;
+        sl.forEach(m => {
+          const hour = m / 60;
+          let r = rnd();
+          if (hour >= 12 && hour < 13) r += 0.45;          // lunch avoided
+          if (hour < 10 && i % 3 === 0) r += 0.3;          // some avoid mornings
+          if (hour >= 17 && i % 4 === 1) r += 0.3;         // some avoid evenings
+          if (run > 0) r -= 0.25;                          // continuity bias
+          if (r < 0.42) { marks[d + '_' + m] = 'best'; run = 1; }
+          else if (r < 0.62) { marks[d + '_' + m] = 'ok'; run = 1; }
+          else run = 0;
+        });
+      });
+      responses[n] = marks;
+    });
+    this.savePoll({ ...poll, responses });
+    this.showToast('데모 응답 7명이 추가되었습니다');
+  }
+
+  agg(poll) {
+    // per key -> {best:[], ok:[]}
+    const map = {};
+    Object.entries(poll.responses).forEach(([n, marks]) => {
+      Object.entries(marks).forEach(([k, cat]) => {
+        if (!map[k]) map[k] = { best: [], ok: [] };
+        map[k][cat === 'best' ? 'best' : 'ok'].push(n);
+      });
+    });
+    return map;
+  }
+
+  candidates(poll) {
+    const names = Object.keys(poll.responses);
+    if (!names.length) return [];
+    const req = poll.required || [];
+    const sm = this.slotMin();
+    const k = Math.max(1, Math.round(poll.dur / sm));
+    const sl = this.slots(poll);
+    const all = [];
+    poll.dates.forEach(d => {
+      for (let i = 0; i + k <= sl.length; i++) {
+        const keys = [];
+        for (let j = 0; j < k; j++) keys.push(d + '_' + sl[i + j]);
+        const avail = [], bestAll = [], okAny = [];
+        names.forEach(n => {
+          const m = poll.responses[n];
+          if (!keys.every(key => m[key])) return;
+          avail.push(n);
+          if (keys.every(key => m[key] === 'best')) bestAll.push(n); else okAny.push(n);
+        });
+        if (!avail.length) continue;
+        const reqOk = req.length ? req.every(n => avail.includes(n)) : true;
+        const reqAvail = req.filter(n => avail.includes(n)).length;
+        const score = (reqOk ? 100000 : 0) + reqAvail * 5000 + avail.length * 100 + bestAll.length * 10 - okAny.length;
+        all.push({ date: d, startMin: sl[i], endMin: sl[i] + k * sm, keys, avail, bestAll, okAny, reqOk, score });
+      }
+    });
+    all.sort((a, b) => b.score - a.score);
+    const picked = [];
+    for (const c of all) {
+      if (picked.length >= 3) break;
+      if (picked.some(p => p.date === c.date && !(c.endMin <= p.startMin || c.startMin >= p.endMin))) continue;
+      picked.push(c);
+    }
+    return picked;
+  }
+
+  keyTitle(key) {
+    const idx = key.lastIndexOf('_');
+    const d = key.slice(0, idx), m = Number(key.slice(idx + 1));
+    return this.dLabel(d) + ' ' + this.fmtMin(m) + ' ~ ' + this.fmtMin(m + this.slotMin());
+  }
+
+  genMsg(c, poll) {
+    const total = Object.keys(poll.responses).length;
+    const req = poll.required || [];
+    const lines = [];
+    lines.push('[' + poll.type + '] 회의 시간이 확정되었습니다.');
+    if (poll.purpose) lines.push('목적: ' + poll.purpose);
+    lines.push('');
+    lines.push('일시: ' + this.dLabel(c.date) + ' ' + this.fmtMin(c.startMin) + ' ~ ' + this.fmtMin(c.endMin));
+    lines.push('');
+    lines.push('선정 근거');
+    lines.push('• 응답자 ' + total + '명 중 ' + c.avail.length + '명이 참석 가능합니다');
+    if (req.length) lines.push(c.reqOk ? '• 필수 참가자 ' + req.length + '명 모두 참석 가능합니다' : '• 필수 참가자 중 일부는 참석이 어렵습니다');
+    if (c.okAny.length) lines.push('• ' + c.okAny.length + '명에게는 선호도가 낮은 시간입니다');
+    else lines.push('• 참석 가능한 모두가 선호하는 시간입니다');
+    lines.push('');
+    lines.push('투표 결과 보기: ' + this.pollLink(poll));
+    return lines.join('\n');
+  }
+
+  // ---------- render ----------
+  renderVals() {
+    const st = this.state;
+    const poll = st.poll;
+    const heatScale = this.props.heatScale ?? 'blue';
+    const showSeed = this.props.showSeedTools ?? true;
+    const v = {};
+
+    v.isCreate = st.screen === 'create';
+    v.isCreated = st.screen === 'created';
+    v.isJoin = st.screen === 'join';
+    v.isRespond = st.screen === 'respond';
+    v.isSubmitted = st.screen === 'submitted';
+    v.isResults = st.screen === 'results';
+    v.roleBadge = { create: '생성자 · 투표 만들기', created: '생성자 · 공유', join: '참가자', respond: '참가자 · ' + st.curName, submitted: '참가자', results: '생성자 · 결과' }[st.screen] || '';
+
+    v.toast = st.toast;
+    v.toastSt = { position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: '#ffffff', border: '1px solid #e6e6e6', borderRadius: 16, padding: '10px 18px', fontSize: 14, fontWeight: 500, boxShadow: '0 4px 18px rgba(0,0,0,0.1)', display: st.toast ? 'block' : 'none', zIndex: 60, whiteSpace: 'nowrap' };
+
+    // ----- shared handlers -----
+    v.onField = (e) => {
+      const f = e.target.dataset.f;
+      let val = e.target.value;
+      if (f === 'fStart' || f === 'fEnd' || f === 'fDur') val = Number(val);
+      const patch = { [f]: val };
+      if (f === 'joinName') patch.joinErr = '';
+      this.setState(patch);
+    };
+    v.onReset = () => {
+      if (poll && Object.keys(poll.responses).length && !window.confirm('현재 투표를 종료하고 새 투표를 만들까요?')) return;
+      this.savePoll(null);
+      this.setState({ screen: 'create', selDates: [], fPurpose: '', marks: {}, curName: '', finalIdx: -1, msgText: '', detailKey: null });
+    };
+    v.goJoin = () => this.setState({ screen: 'join', joinName: '', joinErr: '', marks: {}, cat: 'best' });
+    v.goResults = () => this.setState({ screen: 'results' });
+    v.onSeed = () => this.seedDemo();
+    v.seedSt = { background: '#ffffff', color: '#31302e', border: '1px solid #e6e6e6', borderRadius: 8, padding: '4px 14px', fontSize: 15, fontWeight: 500, cursor: 'pointer', display: showSeed ? 'inline-block' : 'none' };
+
+    // ----- create -----
+    v.fType = st.fType; v.fPurpose = st.fPurpose;
+    v.fStart = String(st.fStart); v.fEnd = String(st.fEnd); v.fDur = String(st.fDur);
+    v.dateChips = this.nextDays(14).map(key => {
+      const sel = st.selDates.includes(key);
+      return {
+        key, label: this.dShort(key),
+        st: { padding: '6px 12px', borderRadius: 9999, fontSize: 14, cursor: 'pointer', border: '1px solid ' + (sel ? '#0075de' : '#e6e6e6'), background: sel ? 'rgba(0,117,222,0.08)' : '#ffffff', color: sel ? '#0075de' : '#31302e', fontWeight: sel ? 600 : 400 }
+      };
+    });
+    v.toggleDate = (e) => {
+      const key = e.currentTarget.dataset.key;
+      const sel = st.selDates.includes(key) ? st.selDates.filter(d => d !== key) : [...st.selDates, key].sort();
+      if (sel.length > 7) { this.showToast('날짜는 최대 7개까지 선택할 수 있어요'); return; }
+      this.setState({ selDates: sel });
+    };
+    let err = '';
+    if (!st.fPurpose.trim()) err = '회의 목적을 입력해 주세요';
+    else if (!st.selDates.length) err = '조사할 날짜를 1개 이상 선택해 주세요';
+    else if (st.fEnd <= st.fStart) err = '종료 시간은 시작 시간보다 늦어야 해요';
+    else if (st.fDur > (st.fEnd - st.fStart) * 60) err = '소요 시간이 조사 시간대보다 길어요';
+    const canCreate = !err;
+    v.createErr = err;
+    v.createBtnSt = { background: '#0075de', color: '#ffffff', border: 'none', borderRadius: 9999, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: canCreate ? 'pointer' : 'default', opacity: canCreate ? 1 : 0.35, pointerEvents: canCreate ? 'auto' : 'none', flex: 'none' };
+    v.onCreate = () => {
+      const id = Math.random().toString(36).slice(2, 8);
+      const p = { id, type: st.fType, purpose: st.fPurpose.trim(), dates: [...st.selDates].sort(), startHour: st.fStart, endHour: st.fEnd, dur: st.fDur, responses: {}, required: [], final: null };
+      this.savePoll(p);
+      this.setState({ screen: 'created', finalIdx: -1, msgText: '' });
+    };
+
+    if (!poll) return v;
+
+    // ----- shared poll info -----
+    const total = Object.keys(poll.responses).length;
+    v.pollTitle = '[' + poll.type + '] ' + poll.purpose;
+    v.pollPurposeLine = this.dLabel(poll.dates[0]) + (poll.dates.length > 1 ? ' 외 ' + (poll.dates.length - 1) + '일' : '') + ' · ' + this.fmtMin(poll.startHour * 60) + '~' + this.fmtMin(poll.endHour * 60) + ' · 소요 ' + poll.dur + '분';
+    v.pollRange = v.pollPurposeLine;
+    v.pollLink = this.pollLink(poll);
+    v.respCountText = total ? '현재 ' + total + '명 응답 완료' : '아직 응답이 없습니다';
+    v.onCopyLink = () => this.copy(this.pollLink(poll), '링크가 복사되었습니다');
+    v.dateHead = poll.dates.map(d => ({ label: this.dShort(d) }));
+
+    // ----- join -----
+    v.joinName = st.joinName;
+    v.joinErr = st.joinErr;
+    v.joinErrSt = { fontSize: 13, color: '#dd5b00', display: st.joinErr ? 'block' : 'none' };
+    const doJoin = () => {
+      const name = st.joinName.trim();
+      if (!name) { this.setState({ joinErr: '이름을 입력해 주세요' }); return; }
+      if (poll.responses[name]) { this.setState({ joinErr: '이미 같은 이름의 응답이 있습니다. 다른 이름을 사용해 주세요.' }); return; }
+      this.setState({ screen: 'respond', curName: name, marks: {}, cat: 'best' });
+    };
+    v.onJoin = doJoin;
+    v.joinKey = (e) => { if (e.key === 'Enter') doJoin(); };
+
+    // ----- respond -----
+    v.curName = st.curName;
+    const segBase = { border: 'none', padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: '#ffffff', color: '#615d59' };
+    v.catBestSt = { ...segBase, background: st.cat === 'best' ? 'rgba(26,174,57,0.12)' : '#ffffff', color: st.cat === 'best' ? '#157a2e' : '#615d59', borderRight: '1px solid #e6e6e6' };
+    v.catOkSt = { ...segBase, background: st.cat === 'ok' ? 'rgba(240,180,41,0.18)' : '#ffffff', color: st.cat === 'ok' ? '#8a5a00' : '#615d59' };
+    v.setCatBest = () => this.setState({ cat: 'best' });
+    v.setCatOk = () => this.setState({ cat: 'ok' });
+
+    const sl = this.slots(poll);
+    v.rRows = sl.map(m => ({
+      label: m % 60 === 0 ? this.fmtMin(m) : '',
+      cells: poll.dates.map(d => {
+        const key = d + '_' + m;
+        const mark = st.marks[key];
+        return {
+          key,
+          st: {
+            flex: 1, height: 24, cursor: 'pointer',
+            borderRight: '1px solid #eeecea', borderLeft: d === poll.dates[0] ? '1px solid #eeecea' : 'none',
+            borderTop: m % 60 === 0 ? '1px solid #d9d5d1' : '1px solid #f1efed',
+            borderBottom: m === sl[sl.length - 1] ? '1px solid #d9d5d1' : 'none',
+            background: mark === 'best' ? '#1aae39' : mark === 'ok' ? '#f0b429' : '#ffffff'
+          }
+        };
+      })
+    }));
+    const keyFromEvent = (e) => (e.target && e.target.dataset ? e.target.dataset.key : null);
+    v.gridDown = (e) => {
+      const key = keyFromEvent(e); if (!key) return;
+      e.preventDefault();
+      const erase = st.marks[key] === st.cat;
+      this.setState({ drag: { erase } });
+      this.paint(key, erase);
+    };
+    v.gridOver = (e) => {
+      if (!this.state.drag) return;
+      const key = keyFromEvent(e); if (!key) return;
+      this.paint(key, this.state.drag.erase);
+    };
+    v.gridTouch = (e) => {
+      const t = e.touches[0]; if (!t) return;
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const key = el && el.dataset ? el.dataset.key : null;
+      if (!key) return;
+      if (e.type === 'touchstart') {
+        const erase = this.state.marks[key] === this.state.cat;
+        this.setState({ drag: { erase } });
+        this.paint(key, erase);
+      } else if (this.state.drag) {
+        this.paint(key, this.state.drag.erase);
+      }
+    };
+    const markedCount = Object.keys(st.marks).length;
+    v.markedText = markedCount ? markedCount + '개 블록 선택됨' : '아직 선택된 시간이 없습니다';
+    v.submitBtnSt = { background: '#0075de', color: '#ffffff', border: 'none', borderRadius: 9999, padding: '10px 24px', fontSize: 16, fontWeight: 500, cursor: markedCount ? 'pointer' : 'default', opacity: markedCount ? 1 : 0.35, pointerEvents: markedCount ? 'auto' : 'none' };
+    v.onSubmitResp = () => {
+      const responses = { ...poll.responses, [st.curName]: st.marks };
+      this.savePoll({ ...poll, responses });
+      this.setState({ screen: 'submitted' });
+    };
+
+    // ----- results -----
+    v.hasResponses = total > 0;
+    v.noResponses = total === 0;
+    if (total > 0) {
+      const map = this.agg(poll);
+      const names = Object.keys(poll.responses);
+      const req = poll.required || [];
+      const recs = this.candidates(poll);
+      const recCellRank = {}; const recBadge = {};
+      recs.forEach((c, i) => {
+        c.keys.forEach(k => { if (recCellRank[k] == null) recCellRank[k] = i + 1; });
+        if (recBadge[c.keys[0]] == null) recBadge[c.keys[0]] = i + 1;
+      });
+
+      v.heatRows = sl.map(m => ({
+        label: m % 60 === 0 ? this.fmtMin(m) : '',
+        cells: poll.dates.map(d => {
+          const key = d + '_' + m;
+          const e = map[key] || { best: [], ok: [] };
+          const a = e.best.length + e.ok.length;
+          const ratio = a / total;
+          let bg;
+          if (a === 0) bg = '#f6f5f4';
+          else if (heatScale === 'traffic') bg = 'hsl(' + Math.round(ratio * 120) + ', 72%, ' + Math.round(62 - ratio * 12) + '%)';
+          else bg = 'rgba(0,117,222,' + (0.12 + ratio * 0.82).toFixed(2) + ')';
+          const rank = recCellRank[key];
+          const badge = recBadge[key];
+          const hovered = st.detailKey === key;
+          return {
+            key,
+            st: {
+              flex: 1, height: 26, position: 'relative', cursor: 'pointer',
+              borderRight: '1px solid rgba(255,255,255,0.6)',
+              borderTop: m % 60 === 0 ? '1px solid rgba(0,0,0,0.12)' : '1px solid rgba(255,255,255,0.35)',
+              background: bg,
+              boxShadow: rank === 1 ? 'inset 0 0 0 2px #0075de' : hovered ? 'inset 0 0 0 2px rgba(0,0,0,0.55)' : 'none'
+            },
+            dotSt: { position: 'absolute', top: 3, right: 4, width: 6, height: 6, borderRadius: 9999, background: '#dd5b00', display: e.ok.length ? 'block' : 'none', pointerEvents: 'none' },
+            badgeSt: { position: 'absolute', top: -1, left: 2, fontSize: 11, fontWeight: 700, color: rank === 1 ? '#0075de' : '#31302e', background: '#ffffff', borderRadius: 4, padding: '0 4px', display: badge ? 'block' : 'none', pointerEvents: 'none', border: '1px solid #e6e6e6' },
+            badge: badge ? String(badge) : ''
+          };
+        })
+      }));
+      v.heatOver = (e) => {
+        const key = keyFromEvent(e);
+        if (key && key !== this.state.detailKey) this.setState({ detailKey: key });
+      };
+
+      const dk = st.detailKey;
+      const de = dk ? (map[dk] || { best: [], ok: [] }) : null;
+      v.detailTitle = dk ? this.keyTitle(dk) : '블록에 마우스를 올려 보세요';
+      v.detailBest = de && de.best.length ? de.best.join(', ') : '—';
+      v.detailOk = de && de.ok.length ? de.ok.join(', ') : '—';
+      const noNames = de ? names.filter(n => !de.best.includes(n) && !de.ok.includes(n)) : [];
+      v.detailNo = de ? (noNames.length ? noNames.join(', ') : '—') : '—';
+      v.detailWarn = de && de.ok.length ? de.ok.length + '명의 참가자에게 이 시간이 최선이 아닐 수 있어요' : '';
+      v.detailWarnSt = { marginTop: 12, fontSize: 13, lineHeight: 1.45, color: '#793400', background: 'rgba(221,91,0,0.07)', borderRadius: 8, padding: '8px 10px', display: de && de.ok.length ? 'block' : 'none' };
+
+      v.participants = names.map(n => ({
+        name: n,
+        checked: req.includes(n),
+        tagSt: { fontSize: 11, fontWeight: 600, letterSpacing: '0.125px', color: '#0075de', border: '1px solid rgba(0,117,222,0.35)', borderRadius: 9999, padding: '1px 8px', display: req.includes(n) ? 'inline-block' : 'none' }
+      }));
+      v.onReqToggle = (e) => {
+        const name = e.target.dataset.name;
+        const cur = poll.required || [];
+        const next = cur.includes(name) ? cur.filter(x => x !== name) : [...cur, name];
+        this.savePoll({ ...poll, required: next });
+        this.setState({ finalIdx: -1, msgText: '' });
+      };
+
+      v.recSubtitle = '소요 시간 ' + poll.dur + '분 기준' + (req.length ? ' · 필수 참가자 ' + req.length + '명 우선 반영' : '') + ' · 상위 ' + recs.length + '개 후보';
+      v.candList = recs.map((c, i) => {
+        const selected = st.finalIdx === i;
+        return {
+          idx: String(i), rank: String(i + 1),
+          title: this.dLabel(c.date) + ' ' + this.fmtMin(c.startMin) + ' ~ ' + this.fmtMin(c.endMin),
+          meta: total + '명 중 ' + c.avail.length + '명 가능 · ' + c.bestAll.length + '명 최선호' + (req.length ? (c.reqOk ? ' · 필수 참가자 모두 가능' : ' · 필수 참가자 일부 불가') : ''),
+          warn: c.okAny.length ? c.okAny.length + '명에게 이 시간이 최선이 아닐 수 있어요' : '',
+          warnSt: { fontSize: 13, color: '#793400', marginTop: 2, display: c.okAny.length ? 'block' : 'none' },
+          rowSt: { display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', border: '1px solid ' + (selected ? '#0075de' : '#e6e6e6'), background: selected ? 'rgba(0,117,222,0.04)' : '#ffffff', borderRadius: 8, padding: '14px 16px' },
+          btnSt: selected
+            ? { background: '#0075de', color: '#ffffff', border: '1px solid #0075de', borderRadius: 8, padding: '5px 14px', fontSize: 14, fontWeight: 600, cursor: 'default', flex: 'none' }
+            : { background: '#ffffff', color: 'rgba(0,0,0,0.85)', border: '1px solid #e6e6e6', borderRadius: 8, padding: '5px 14px', fontSize: 14, fontWeight: 500, cursor: 'pointer', flex: 'none' },
+          btnLabel: selected ? '확정됨 ✓' : '이 시간으로 확정'
+        };
+      });
+      v.noRecSt = { fontSize: 14, color: '#615d59', background: '#f6f5f4', borderRadius: 8, padding: '14px 16px', display: recs.length ? 'none' : 'block' };
+      v.onPick = (e) => {
+        const idx = Number(e.currentTarget.dataset.idx);
+        const c = recs[idx]; if (!c) return;
+        this.savePoll({ ...poll, final: { date: c.date, startMin: c.startMin, endMin: c.endMin } });
+        this.setState({ finalIdx: idx, msgText: this.genMsg(c, poll) });
+      };
+      v.finalSt = { background: '#ffffff', border: '1px solid #e6e6e6', borderRadius: 12, padding: 24, marginTop: 20, display: st.finalIdx >= 0 ? 'block' : 'none' };
+      v.msgText = st.msgText;
+      v.onMsgChange = (e) => this.setState({ msgText: e.target.value });
+      v.onCopyMsg = () => this.copy(st.msgText, '확정 메시지가 복사되었습니다');
+    }
+    return v;
+  }
+}
+</script>
+</body>
+</html>
