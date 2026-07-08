@@ -10,6 +10,7 @@ import {
   dateShort,
   evaluateSlot,
   fmtMin,
+  pollLink,
   pollTitle,
   responseCountText,
   slots,
@@ -25,7 +26,7 @@ import {
   timetableSlotHeight,
 } from "../lib/timetable";
 import { AccordionPanel } from "../components/AccordionPanel";
-import { TimetableScrollFrame } from "../components/TimetableScrollFrame";
+import { ScrollButton, TimetableScrollFrame } from "../components/TimetableScrollFrame";
 import { useToast } from "../components/Toast";
 import { PrimaryButton, UtilityButton } from "../components/ui";
 import {
@@ -42,7 +43,7 @@ import {
 
 const tabularNumberStyle = { fontVariantNumeric: "tabular-nums" as const };
 const requiredPanelId = "required-participants-panel";
-const accordionCard = { ...card, gap: 0 };
+const accordionCard = { ...card, gap: 0, padding: 0 };
 const heatmapMinAlpha = 0.08;
 const heatmapMaxAlpha = 0.92;
 const heatmapContrastPower = 1.25;
@@ -197,7 +198,7 @@ export function ResultsPage() {
   const dk = detailKey;
   const de = dk ? map[dk] || { best: [], ok: [] } : null;
   const detailTitle = dk ? detailSlotTitle(dk) : null;
-  const detailPanelTitle = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려보세요";
+  const detailPanelTime = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려 보세요";
   const detailOkCount = de ? de.ok.length : null;
   const detailPeople: DetailPerson[] = de
     ? names.map((name) => ({
@@ -212,11 +213,6 @@ export function ResultsPage() {
   const selectedRecommendationExists =
     selectedRecommendationIdx !== null && selectedRecommendationIdx >= 0 && selectedRecommendationIdx < visibleRecs.length;
   const activeRecommendationIdx = selectedRecommendationExists ? selectedRecommendationIdx : visibleRecs.length ? 0 : -1;
-  const hasActiveRecommendation = activeRecommendationIdx >= 0 && activeRecommendationIdx < visibleRecs.length;
-  const activeRecommendationIsFinal = hasActiveRecommendation && activeRecommendationIdx === finalIdx;
-  const confirmRecommendationLabel = !hasActiveRecommendation
-    ? "모일 시간을 선택해 주세요"
-    : "선택한 시간으로 공유하기";
   const timetableGridColumns = buildTimetableGridColumns(poll.dates.length);
   const timetableWidth = timetableContentWidth(poll.dates.length);
 
@@ -227,23 +223,32 @@ export function ResultsPage() {
     if (candidate) setDetailKey(`${candidate.date}_${candidate.startMin}`);
   }
 
-  async function onConfirmRecommendation() {
-    if (!hasActiveRecommendation || !poll || recommendationsUpdating) return;
-    const candidate = visibleRecs[activeRecommendationIdx];
-    if (!activeRecommendationIsFinal) await onPick(activeRecommendationIdx);
+  async function onShareRecommendation(idx: number) {
+    if (!poll || recommendationsUpdating) return;
+    const candidate = visibleRecs[idx];
+    if (!candidate) return;
+    if (idx !== finalIdx) await onPick(idx);
     setMsgText(buildConfirmationMessage(candidate, poll, total));
     setMsgEdited(false);
-    setSelectedRecommendationIdx(activeRecommendationIdx);
+    setSelectedRecommendationIdx(idx);
     setMessageModalOpen(true);
   }
 
   return (
     <div style={{ ...pagePadding, padding: "36px 20px 100px" }}>
-      <div style={{ width: "100%", maxWidth: 1180 }}>
+      <div style={{ width: "100%", maxWidth: 1040 }}>
         <div style={{ marginBottom: 24 }}>
-          <div style={{ ...pageTitle, maxWidth: 820 }}>
-            <span>{durationHours}</span>{" "}<span>{pollTitle(poll)}</span>
-            <span style={{ color: "var(--color-ink-muted)" }}>,<br></br>언제 모일까요?</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ ...pageTitle, maxWidth: 820, minWidth: 0 }}>
+              <span>{durationHours}</span>{" "}<span>{pollTitle(poll)}</span>
+              <span style={{ color: "var(--color-ink-muted)" }}>,<br></br>언제 모일까요?</span>
+            </div>
+            <UtilityButton
+              onClick={() => copyText(pollLink(poll.id), () => showToast("링크가 복사되었습니다"))}
+              style={{ flex: "none", whiteSpace: "nowrap", padding: "10px 20px", fontSize: 16, fontWeight: 600, minHeight: 44 }}
+            >
+              응답 링크 복사
+            </UtilityButton>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ ...metaText, ...tabularNumberStyle }}>{responseCountText(total)}</div>
@@ -252,24 +257,21 @@ export function ResultsPage() {
 
         {total > 0 ? (
           <>
-            <div style={{ ...card, minWidth: 0, padding: 16, marginBottom: 20 }}>
-              <RecommendationCarousel
-                recommendations={visibleRecs}
-                activeIdx={activeRecommendationIdx}
-                finalIdx={finalIdx}
-                total={total}
-                durationMinutes={poll.dur}
-                requiredCount={req.length}
-                confirmLabel={confirmRecommendationLabel}
-                hasActiveRecommendation={hasActiveRecommendation}
-                updating={recommendationsUpdating}
-                onSelect={selectRecommendation}
-                onConfirm={onConfirmRecommendation}
-              />
-            </div>
+          <div style={{ ...card, minWidth: 0, padding: 0, marginBottom: 20 }}>
+            <RecommendationCarousel
+              recommendations={visibleRecs}
+              activeIdx={activeRecommendationIdx}
+              total={total}
+              requiredCount={req.length}
+              updating={recommendationsUpdating}
+              onSelect={selectRecommendation}
+              onShare={onShareRecommendation}
+            />
+          </div>
 
-            <div className="results-layout">
-              <div style={{ ...card, minWidth: 0, padding: 16 }}>
+          <div className="results-layout">
+            <div className="results-main-panel">
+              <div style={{ ...card, minWidth: 0, padding: 0 }}>
                 <TimetableScrollFrame>
                   <div style={{ width: timetableWidth, userSelect: "none" }}>
                     <div style={{ display: "grid", gridTemplateColumns: timetableGridColumns, marginBottom: 4 }}>
@@ -407,108 +409,93 @@ export function ResultsPage() {
                   </div>
                 </TimetableScrollFrame>
               </div>
+            </div>
 
-              <div className="results-side-panel">
+            <div className="results-side-panel">
+              <div
+                className="time-detail-card"
+                style={{
+                  ...card,
+                  color: "var(--time-detail-ink)",
+                  gap: 12,
+                  background: "transparent",
+                  padding: "0 0 4px",
+                }}
+              >
                 <div
-                  className="time-detail-card"
+                  style={
+                    detailTitle
+                      ? { fontSize: 19, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0, color: "var(--time-detail-ink)", textWrap: "balance" as const }
+                      : { ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }
+                  }
+                >
+                  {detailTitle ? (
+                    <>
+                      <span>{detailTitle.date}</span>{" "}
+                      <span style={tabularNumberStyle}>{detailTitle.time}</span>
+                    </>
+                  ) : (
+                    detailPanelTime
+                  )}
+                </div>
+                {detailTitle && <NameChips people={detailPeople} />}
+                <div
+                  aria-hidden={!detailOkCount}
                   style={{
-                    ...card,
-                    color: "var(--time-detail-ink)",
-                    gap: 12,
-                    background: "var(--time-detail-bg)",
-                    border: "1px solid var(--time-detail-border)",
-                    boxShadow: "0 16px 34px rgba(31, 30, 28, 0.22), 0 2px 8px rgba(31, 30, 28, 0.12)",
+                    ...captionText,
+                    color: "var(--time-detail-warn-text)",
+                    background: "var(--time-detail-warn-bg)",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    visibility: detailOkCount ? "visible" : "hidden",
+                    ...tabularNumberStyle,
                   }}
                 >
-                  <div style={{ ...cardTitle, color: "var(--time-detail-ink)" }}>
-                    {detailTitle ? (
-                      <>
-                        <span>{detailTitle.date}</span> <span style={tabularNumberStyle}>{detailTitle.time}</span>
-                      </>
-                    ) : (
-                      detailPanelTitle
-                    )}
+                  {detailOkCount ?? 1}명에게는 이 시간이 부담스러울 수 있어요
+                </div>
+              </div>
+
+              <div style={accordionCard}>
+                <AccordionHeader
+                  title="필수 참석자 지정"
+                  summary={req.length ? `${req.length}명` : ""}
+                  summaryPlacement="inline"
+                  open={requiredOpen}
+                  panelId={requiredPanelId}
+                  onToggle={() => setRequiredOpen((open) => !open)}
+                />
+                <AccordionPanel id={requiredPanelId} open={requiredOpen}>
+                  <div style={{ ...metaText, marginBottom: 12, textWrap: "pretty" }}>
+                    필수 참석자가 모두 가능한 시간을 우선 추천합니다.
                   </div>
-                  {!detailTitle && (
-                    <div style={{ ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }}>
-                      블록에 마우스를 올려 보세요
-                    </div>
-                  )}
-                  {detailTitle && <NameChips people={detailPeople} />}
-                  {detailOkCount !== null && detailOkCount > 0 && (
-                    <div
-                      style={{
-                        ...captionText,
-                        color: "var(--time-detail-warn-text)",
-                        background: "var(--time-detail-warn-bg)",
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                        ...tabularNumberStyle,
-                      }}
-                    >
-                      {detailOkCount}명에게는 이 시간이 부담스러울 수 있어요
-                    </div>
-                  )}
-                </div>
-
-                <div style={accordionCard}>
-                  <AccordionHeader
-                    title="필수 참석자 지정"
-                    summary={req.length ? `${req.length}명` : ""}
-                    summaryPlacement="inline"
-                    open={requiredOpen}
-                    panelId={requiredPanelId}
-                    onToggle={() => setRequiredOpen((open) => !open)}
-                  />
-                  <AccordionPanel id={requiredPanelId} open={requiredOpen}>
-                    <div style={{ ...metaText, marginBottom: 12, textWrap: "pretty" }}>
-                      필수 참석자가 모두 가능한 시간을 우선 추천합니다.
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      {names.map((n) => {
-                        const checked = req.includes(n);
-                        return (
-                          <label
-                            key={n}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 5, cursor: "pointer", fontSize: 16, lineHeight: 1.45, letterSpacing: 0 }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleRequired(n)}
-                              style={{ accentColor: "var(--color-primary)", width: 16, height: 16 }}
-                            />
-                            <span style={{ flex: 1 }}>{n}</span>
-                            {checked && (
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  lineHeight: 1.4,
-                                  letterSpacing: 0,
-                                  color: "var(--color-primary)",
-                                  border: "1px solid var(--color-primary-ring)",
-                                  borderRadius: 9999,
-                                  padding: "1px 8px",
-                                }}
-                              >
-                                필수
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </AccordionPanel>
-                </div>
-
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {names.map((n) => {
+                      const checked = req.includes(n);
+                      return (
+                        <label
+                          key={n}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 5, cursor: "pointer", fontSize: 16, lineHeight: 1.45, letterSpacing: 0 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleRequired(n)}
+                            style={{ accentColor: "var(--color-primary)", width: 16, height: 16 }}
+                          />
+                          <span style={{ flex: 1 }}>{n}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </AccordionPanel>
               </div>
             </div>
+          </div>
           </>
         ) : (
-          <div style={{ background: "var(--color-canvas-soft)", border: "1px dashed #d9d5d1", borderRadius: 16, padding: 48, textAlign: "center" }}>
+          <div style={{ padding: "24px 0 0", textAlign: "center" }}>
             <div style={{ ...supportingText, marginBottom: 16 }}>
               아직 응답이 없습니다. 링크를 공유하거나 데모 응답을 채워 보세요.
             </div>
@@ -537,28 +524,67 @@ export function ResultsPage() {
 function RecommendationCarousel({
   recommendations,
   activeIdx,
-  finalIdx,
   total,
-  durationMinutes,
   requiredCount,
-  confirmLabel,
-  hasActiveRecommendation,
   updating,
   onSelect,
-  onConfirm,
+  onShare,
 }: {
   recommendations: Candidate[];
   activeIdx: number;
-  finalIdx: number;
   total: number;
-  durationMinutes: number;
   requiredCount: number;
-  confirmLabel: string;
-  hasActiveRecommendation: boolean;
   updating: boolean;
   onSelect: (idx: number) => void;
-  onConfirm: () => void;
+  onShare: (idx: number) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  const updateEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const maxScrollLeft = el.scrollWidth - el.clientWidth;
+    const next = {
+      left: el.scrollLeft > 1,
+      right: maxScrollLeft - el.scrollLeft > 1,
+    };
+    setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+  }, []);
+
+  const scrollByDirection = useCallback((direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: el.clientWidth * 0.7 * (direction === "left" ? -1 : 1),
+      behavior: "smooth",
+    });
+  }, []);
+
+  useEffect(() => {
+    updateEdges();
+  });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", updateEdges, { passive: true });
+    window.addEventListener("resize", updateEdges);
+
+    const resizeObserver = new ResizeObserver(updateEdges);
+    resizeObserver.observe(el);
+    if (el.firstElementChild) resizeObserver.observe(el.firstElementChild);
+
+    updateEdges();
+
+    return () => {
+      el.removeEventListener("scroll", updateEdges);
+      window.removeEventListener("resize", updateEdges);
+      resizeObserver.disconnect();
+    };
+  }, [recommendations.length, updateEdges]);
+
   return (
     <section className="recommendation-panel-content" aria-busy={updating}>
       <div className="recommendation-carousel-heading">
@@ -566,85 +592,102 @@ function RecommendationCarousel({
           <div style={{ ...cardTitle, color: "var(--color-ink)" }}>추천 시간</div>
         </div>
       </div>
-      <PrimaryButton
-        className="recommendation-confirm-button"
-        onClick={onConfirm}
-        disabled={!hasActiveRecommendation || updating}
-        style={{ minHeight: 40, padding: "8px 16px", fontSize: 15, whiteSpace: "nowrap" }}
-      >
-        {confirmLabel}
-      </PrimaryButton>
 
       {recommendations.length > 0 ? (
-        <div className="recommendation-carousel" data-updating={updating ? "true" : "false"} role="listbox" aria-label="추천 시간">
-          {recommendations.map((candidate, i) => {
-            const selected = activeIdx === i;
-            const final = finalIdx === i;
-            return (
-              <button
-                type="button"
-                key={`${candidate.date}_${candidate.startMin}_${i}`}
-                className="recommendation-carousel-card"
-                role="option"
-                aria-selected={selected}
-                disabled={updating}
-                onClick={() => onSelect(i)}
-                style={{
-                  border: selected ? "1px solid transparent" : "1px solid rgba(52, 50, 48, 0.08)",
-                  outline: selected ? "3px solid rgba(var(--color-best-rgb), 0.72)" : undefined,
-                  outlineOffset: selected ? "-3px" : undefined,
-                  background: selected ? "rgba(var(--color-best-rgb), 0.06)" : "rgba(52, 50, 48, 0.025)",
-                  boxShadow: "none",
-                  cursor: updating ? "default" : "pointer",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 24 }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: 32,
-                      minHeight: 24,
-                      borderRadius: 9999,
-                      background: selected ? "var(--color-primary)" : "var(--color-primary-soft)",
-                      color: selected ? "#ffffff" : "var(--color-primary)",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      letterSpacing: 0,
-                      padding: "4px 8px",
-                      ...tabularNumberStyle,
-                    }}
-                  >
-                    {rankLabel(i)}
-                  </span>
-                </div>
-
-                <div style={{ minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, rowGap: 2, fontSize: 18, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0 }}>
-                  <span>{dateShort(candidate.date)}</span>
-                  <span style={tabularNumberStyle}>{fmtMin(candidate.startMin)} ~ {fmtMin(candidate.endMin)}</span>
-                </div>
-
-                <RecommendationCriteria candidate={candidate} total={total} requiredCount={requiredCount} />
+        <div className="recommendation-carousel-frame" data-left-edge={edges.left ? "true" : "false"} data-right-edge={edges.right ? "true" : "false"}>
+          <div ref={scrollRef} className="recommendation-carousel" data-updating={updating ? "true" : "false"} role="listbox" aria-label="추천 시간">
+            {recommendations.map((candidate, i) => {
+              const selected = activeIdx === i;
+              return (
                 <div
-                  aria-hidden={candidate.okAny.length === 0}
+                  key={`${candidate.date}_${candidate.startMin}_${i}`}
+                  className="recommendation-carousel-card"
+                  role="option"
+                  aria-selected={selected}
+                  aria-disabled={updating}
+                  tabIndex={updating ? -1 : 0}
+                  onClick={() => {
+                    if (!updating) onSelect(i);
+                  }}
+                  onKeyDown={(e) => {
+                    if (updating) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(i);
+                    }
+                  }}
                   style={{
-                    ...captionText,
-                    minHeight: 40,
-                    color: "var(--color-warn-text)",
-                    visibility: candidate.okAny.length > 0 ? "visible" : "hidden",
-                    ...tabularNumberStyle,
+                    border: selected ? "1px solid transparent" : "1px solid rgba(52, 50, 48, 0.08)",
+                    outline: selected ? "3px solid rgba(var(--color-best-rgb), 0.72)" : undefined,
+                    outlineOffset: selected ? "-3px" : undefined,
+                    background: selected ? "rgba(var(--color-best-rgb), 0.06)" : "rgba(52, 50, 48, 0.025)",
+                    boxShadow: "none",
+                    cursor: updating ? "default" : "pointer",
                   }}
                 >
-                  {candidate.okAny.length > 0 ? `${candidate.okAny.length}명에게는 이 시간이 부담스러울 수 있어요` : "\u00A0"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28 }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minWidth: 32,
+                        minHeight: 24,
+                        borderRadius: 9999,
+                        background: selected ? "var(--color-primary)" : "var(--color-primary-soft)",
+                        color: selected ? "#ffffff" : "var(--color-primary)",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        lineHeight: 1,
+                        letterSpacing: 0,
+                        padding: "4px 8px",
+                        ...tabularNumberStyle,
+                      }}
+                    >
+                      {rankLabel(i)}
+                    </span>
+                    <button
+                      type="button"
+                      className="recommendation-card-share"
+                      aria-label={`${rankLabel(i)} 시간으로 공유하기`}
+                      disabled={updating}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onShare(i);
+                      }}
+                    >
+                      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: 15, height: 15, display: "block" }}>
+                        <path d="M8 2.4V9.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M5.3 5L8 2.3L10.7 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M5 7.7H4.6A1.6 1.6 0 0 0 3 9.3V12A1.6 1.6 0 0 0 4.6 13.6H11.4A1.6 1.6 0 0 0 13 12V9.3A1.6 1.6 0 0 0 11.4 7.7H11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div style={{ minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, rowGap: 2, fontSize: 18, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0 }}>
+                    <span>{dateShort(candidate.date)}</span>
+                    <span style={tabularNumberStyle}>{fmtMin(candidate.startMin)} ~ {fmtMin(candidate.endMin)}</span>
+                  </div>
+
+                  <RecommendationCriteria
+                    candidate={candidate}
+                    total={total}
+                    requiredCount={requiredCount}
+                    highlight={recommendationHighlight(candidate, recommendations, total)}
+                  />
                 </div>
-              </button>
-            );
-          })}
+              );
+            })}
+          </div>
+          <div className="recommendation-carousel-edge recommendation-carousel-edge--left" aria-hidden={!edges.left}>
+            <ScrollButton direction="left" disabled={!edges.left || updating} onClick={() => scrollByDirection("left")} />
+          </div>
+          <div className="recommendation-carousel-edge recommendation-carousel-edge--right" aria-hidden={!edges.right}>
+            <ScrollButton direction="right" disabled={!edges.right || updating} onClick={() => scrollByDirection("right")} />
+          </div>
         </div>
       ) : (
-        <div className="recommendation-empty" style={{ ...metaText, background: "var(--color-canvas-soft)", borderRadius: 8, padding: "14px 16px", textWrap: "pretty" }}>
+        <div className="recommendation-empty" style={{ ...metaText, padding: "2px 0 0", textWrap: "pretty" }}>
           필수 참석자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요.
         </div>
       )}
@@ -862,14 +905,30 @@ function ChevronDownIcon({ open }: { open: boolean }) {
   );
 }
 
+function recommendationHighlight(candidate: Candidate, candidates: Candidate[], total: number): string | null {
+  const burdened = candidate.okAny.length;
+  if (burdened === 0) {
+    return total > 0 && candidate.avail.length === total
+      ? "모두가 부담 없이 모일 수 있는 시간이에요"
+      : "참석 가능한 모두가 편한 시간이에요";
+  }
+  const minBurdened = Math.min(...candidates.map((c) => c.okAny.length));
+  if (candidates.length > 1 && burdened === minBurdened) {
+    return "부담을 느끼는 참석자가 가장 적어요";
+  }
+  return null;
+}
+
 function RecommendationCriteria({
   candidate,
   total,
   requiredCount,
+  highlight,
 }: {
   candidate: Candidate;
   total: number;
   requiredCount: number;
+  highlight: string | null;
 }) {
   const items: Array<{ label: string; checked: boolean }> = [];
 
@@ -883,6 +942,7 @@ function RecommendationCriteria({
     label: total > 0 && candidate.avail.length === total ? "모든 참석자 가능" : `${total}명 중 ${candidate.avail.length}명 가능`,
     checked: candidate.avail.length > 0,
   });
+  if (highlight) items.push({ label: highlight, checked: true });
 
   return (
     <ul style={{ display: "flex", flexDirection: "column", gap: 4, listStyle: "none", padding: 0, margin: "4px 0 0" }}>
@@ -891,7 +951,7 @@ function RecommendationCriteria({
           key={item.label}
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             gap: 6,
             ...metaText,
             color: item.checked ? "var(--color-ink-muted)" : "var(--color-ink-faint)",
@@ -907,6 +967,7 @@ function RecommendationCriteria({
               alignItems: "center",
               justifyContent: "center",
               flex: "none",
+              marginTop: 1,
               color: item.checked ? "var(--color-best)" : "var(--color-ink-faint)",
             }}
           >

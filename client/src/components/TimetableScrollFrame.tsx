@@ -112,7 +112,7 @@ export function TimetableScrollFrame({ children }: { children: ReactNode }) {
   );
 }
 
-function ScrollButton({
+export function ScrollButton({
   direction,
   disabled,
   onClick,

@@ -7,10 +7,10 @@ export const pagePadding: CSSProperties = {
 };
 
 export const card: CSSProperties = {
-  background: "var(--color-surface)",
-  border: "1px solid var(--color-hairline)",
-  borderRadius: "var(--radius-lg)",
-  padding: 24,
+  background: "transparent",
+  border: 0,
+  borderRadius: 0,
+  padding: 0,
   display: "flex",
   flexDirection: "column",
   gap: 20,

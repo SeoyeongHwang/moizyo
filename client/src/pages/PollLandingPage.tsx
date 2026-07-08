@@ -101,8 +101,6 @@ export function PollLandingPage() {
               display: "flex",
               flexWrap: "wrap",
               gap: 10,
-              borderTop: "1px solid var(--color-hairline)",
-              paddingTop: 20,
             }}
           >
             <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>참석자로 응답하기</PrimaryButton>

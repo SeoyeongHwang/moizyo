@@ -3,7 +3,7 @@ import { timeAxisLabel } from "./scheduling";
 
 export const timetableLabelWidth = 66;
 export const timetableSlotHeight = 34;
-const timetableDateMinWidth = 104;
+const timetableDateMinWidth = 82;
 
 const tabularNumberStyle = { fontVariantNumeric: "tabular-nums" as const };
 

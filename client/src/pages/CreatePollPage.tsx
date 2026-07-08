@@ -420,8 +420,7 @@ export function CreatePollPage() {
 
           <div
             style={{
-              borderTop: "1px solid var(--color-hairline)",
-              paddingTop: 20,
+              paddingTop: 4,
             }}
           >
             <PrimaryButton onClick={onCreate} disabled={!canCreate || submitting} style={{ width: "100%", minHeight: 48 }}>

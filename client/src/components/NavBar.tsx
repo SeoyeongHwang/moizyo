@@ -5,7 +5,7 @@ export function NavBar() {
   return (
     <div
       style={{
-        background: "var(--color-canvas-soft)",
+        background: "var(--color-canvas)",
         padding: "12px 24px",
         display: "flex",
         alignItems: "center",

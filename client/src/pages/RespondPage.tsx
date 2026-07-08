@@ -154,7 +154,7 @@ export function RespondPage() {
             드래그해서 가능한 시간을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
           </div>
 
-          <div style={{ ...card, padding: 20 }}>
+          <div style={{ ...card, padding: 0 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ display: "flex", border: "1px solid var(--color-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
                 <button
@@ -247,7 +247,6 @@ export function RespondPage() {
           zIndex: 20,
           display: "flex",
           justifyContent: "center",
-          borderTop: "1px solid var(--color-hairline)",
           background: "rgba(255,255,255,0.96)",
           boxShadow: "0 -8px 24px rgba(0,0,0,0.06)",
           padding: "12px 20px calc(12px + env(safe-area-inset-bottom))",

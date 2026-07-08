@@ -58,14 +58,9 @@ export function JoinPage() {
       <div style={{ width: "100%", maxWidth: 440 }}>
         <div
           style={{
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-hairline)",
-            borderRadius: "var(--radius-xl)",
-            padding: 28,
             display: "flex",
             flexDirection: "column",
             gap: 16,
-            boxShadow: "var(--shadow-1)",
           }}
         >
           <div>
