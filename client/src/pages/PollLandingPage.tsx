@@ -5,7 +5,17 @@ import type { PollMeta } from "../lib/scheduling";
 import { pollLink, pollRangeLine, pollTitle, responseCountText } from "../lib/scheduling";
 import { copyText } from "../lib/clipboard";
 import { useToast } from "../components/Toast";
-import { card, pagePadding, PrimaryButton, SecondaryButton, stepBadge, textInput, UtilityButton } from "../components/ui";
+import { PrimaryButton, SecondaryButton, UtilityButton } from "../components/ui";
+import {
+  card,
+  cardTitle,
+  metaText,
+  pagePadding,
+  pageTitle,
+  sectionTitle,
+  supportingText,
+  textInput,
+} from "../components/uiStyles";
 
 export function PollLandingPage() {
   const { id } = useParams<{ id: string }>();
@@ -48,18 +58,17 @@ export function PollLandingPage() {
   return (
     <div style={{ ...pagePadding, padding: "48px 20px 80px" }}>
       <div style={{ width: "100%", maxWidth: 640 }}>
-        <div style={stepBadge}>STEP 2 · 링크 공유</div>
-        <div style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-1px", marginBottom: 10 }}>
-          투표가 생성되었습니다
+        <div style={{ ...pageTitle, marginBottom: 10 }}>
+          링크가 생성되었어요
         </div>
-        <div style={{ fontSize: 16, lineHeight: 1.5, color: "var(--color-ink-muted)", marginBottom: 28 }}>
-          아래 링크를 팀 채팅방에 공유하세요. 참가자의 응답은 서로에게 보이지 않습니다.
+        <div style={{ ...supportingText, marginBottom: 28 }}>
+          아래 링크를 공유할 수 있습니다.
         </div>
 
         <div style={card}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.125px" }}>{pollTitle(poll)}</div>
-            <div style={{ fontSize: 14, color: "var(--color-ink-muted)" }}>{pollRangeLine(poll)}</div>
+            <div style={cardTitle}>{pollTitle(poll)}</div>
+            <div style={metaText}>{pollRangeLine(poll)}</div>
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
@@ -84,7 +93,7 @@ export function PollLandingPage() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: 9999, background: "var(--color-best)" }} />
-            <div style={{ fontSize: 14, color: "var(--color-ink-muted)" }}>{responseCountText(poll.responseCount)}</div>
+            <div style={metaText}>{responseCountText(poll.responseCount)}</div>
           </div>
 
           <div
@@ -96,7 +105,7 @@ export function PollLandingPage() {
               paddingTop: 20,
             }}
           >
-            <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>참가자로 응답하기</PrimaryButton>
+            <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>참석자로 응답하기</PrimaryButton>
             <SecondaryButton onClick={() => navigate(`/vote/${poll.id}/results`)}>결과 보기 (생성자)</SecondaryButton>
             <UtilityButton onClick={onSeed}>데모 응답 7명 채우기</UtilityButton>
           </div>
@@ -110,8 +119,8 @@ function NotFoundPanel() {
   return (
     <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
       <div style={{ width: "100%", maxWidth: 440 }}>
-        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>투표를 찾을 수 없습니다</div>
-        <div style={{ fontSize: 15, color: "var(--color-ink-muted)" }}>링크가 정확한지 확인해 주세요.</div>
+        <div style={{ ...sectionTitle, marginBottom: 8 }}>투표를 찾을 수 없습니다</div>
+        <div style={supportingText}>링크가 정확한지 확인해 주세요.</div>
       </div>
     </div>
   );

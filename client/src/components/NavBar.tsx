@@ -1,12 +1,11 @@
 import { useNavigate } from "react-router-dom";
 
-export function NavBar({ roleLabel }: { roleLabel: string }) {
+export function NavBar() {
   const navigate = useNavigate();
   return (
     <div
       style={{
-        background: "#ffffff",
-        borderBottom: "1px solid var(--color-hairline)",
+        background: "var(--color-canvas-soft)",
         padding: "12px 24px",
         display: "flex",
         alignItems: "center",
@@ -30,43 +29,42 @@ export function NavBar({ roleLabel }: { roleLabel: string }) {
             alignItems: "center",
             justifyContent: "center",
             fontWeight: 700,
-            fontSize: 14,
+            fontSize: 15,
+            lineHeight: 1,
+            letterSpacing: 0,
           }}
         >
           언
         </div>
-        <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.25px", whiteSpace: "nowrap" }}>언제볼까</div>
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--color-primary)",
-            background: "#ffffff",
-            border: "1px solid var(--color-hairline)",
-            borderRadius: 9999,
-            padding: "3px 10px",
-            letterSpacing: "0.125px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {roleLabel}
-        </div>
+        <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.35, letterSpacing: 0, whiteSpace: "nowrap" }}>moiltime</div>
       </div>
       <button
         onClick={() => navigate("/")}
         style={{
-          background: "#ffffff",
-          border: "1px solid var(--color-hairline)",
-          borderRadius: 8,
-          padding: "4px 14px",
-          fontSize: 14,
-          fontWeight: 500,
-          color: "rgba(0,0,0,0.85)",
+          minHeight: 40,
+          background: "transparent",
+          border: "none",
+          borderRadius: "var(--radius-full)",
+          padding: "0 14px",
+          fontSize: 15,
+          fontWeight: 600,
+          lineHeight: 1.35,
+          letterSpacing: 0,
+          color: "var(--color-ink-secondary)",
           cursor: "pointer",
           whiteSpace: "nowrap",
+          transitionProperty: "background-color, color",
+          transitionDuration: "150ms",
+          transitionTimingFunction: "ease-out",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--color-primary-soft)";
+          e.currentTarget.style.color = "var(--color-primary-active)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "transparent";
+          e.currentTarget.style.color = "var(--color-ink-secondary)";
+        }}
       >
         새 투표 만들기
       </button>

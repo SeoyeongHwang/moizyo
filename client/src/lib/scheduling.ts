@@ -7,7 +7,6 @@ export type Marks = Record<string, Category>;
 
 export interface PollMeta {
   id: string;
-  type: string;
   purpose: string;
   dates: string[];
   startHour: number;
@@ -37,6 +36,16 @@ export interface Candidate {
 }
 
 const WEEKDAYS = "일월화수목금토";
+const WEEKDAY_LABELS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+function weekdayIndex(dateKey: string): number | null {
+  const match = /^weekday-([0-6])$/.exec(dateKey);
+  return match ? Number(match[1]) : null;
+}
+
+function isWeekdayKey(dateKey: string): boolean {
+  return weekdayIndex(dateKey) !== null;
+}
 
 export function fmtMin(m: number): string {
   const h = Math.floor(m / 60);
@@ -44,19 +53,32 @@ export function fmtMin(m: number): string {
   return String(h).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
 }
 
+export function timeAxisLabel(m: number): string {
+  const h = Math.floor(m / 60);
+  const period = h < 12 ? "오전" : "오후";
+  const hour = h % 12 || 12;
+  return `${period} ${hour}시`;
+}
+
 export function weekday(dateKey: string): string {
+  const index = weekdayIndex(dateKey);
+  if (index !== null) return WEEKDAYS[index];
   const d = new Date(dateKey + "T00:00:00");
   return WEEKDAYS[d.getDay()];
 }
 
 export function dateLabel(dateKey: string): string {
+  const index = weekdayIndex(dateKey);
+  if (index !== null) return WEEKDAY_LABELS[index];
   const d = new Date(dateKey + "T00:00:00");
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${weekday(dateKey)})`;
 }
 
 export function dateShort(dateKey: string): string {
+  const index = weekdayIndex(dateKey);
+  if (index !== null) return WEEKDAY_LABELS[index];
   const d = new Date(dateKey + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()} ${weekday(dateKey)}`;
+  return `${d.getMonth() + 1}/${d.getDate()} (${weekday(dateKey)})`;
 }
 
 export function nextDays(n: number): string[] {
@@ -77,13 +99,14 @@ export function slots(poll: { startHour: number; endHour: number }): number[] {
   return out;
 }
 
-export function pollTitle(poll: { type: string; purpose: string }): string {
-  return `[${poll.type}] ${poll.purpose}`;
+export function pollTitle(poll: { purpose: string }): string {
+  return poll.purpose;
 }
 
 export function pollRangeLine(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
-  const extra = poll.dates.length > 1 ? ` 외 ${poll.dates.length - 1}일` : "";
-  return `${dateLabel(poll.dates[0])}${extra} · ${fmtMin(poll.startHour * 60)}~${fmtMin(poll.endHour * 60)} · 소요 ${poll.dur}분`;
+  const isWeekdayPoll = poll.dates.every(isWeekdayKey);
+  const extra = poll.dates.length > 1 ? ` 외 ${poll.dates.length - 1}${isWeekdayPoll ? "개 요일" : "일"}` : "";
+  return `${dateLabel(poll.dates[0])}${extra} ${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 중, ${poll.dur}분 예상`;
 }
 
 export function responseCountText(total: number): string {
@@ -179,18 +202,20 @@ export function buildConfirmationMessage(
 ): string {
   const req = poll.required || [];
   const lines: string[] = [];
-  lines.push(`[${poll.type}] 회의 시간이 확정되었습니다.`);
-  if (poll.purpose) lines.push(`목적: ${poll.purpose}`);
+  lines.push(`${poll.purpose} 시간이 확정되었습니다.`);
   lines.push("");
   lines.push(`일시: ${dateLabel(candidate.date)} ${fmtMin(candidate.startMin)} ~ ${fmtMin(candidate.endMin)}`);
   lines.push("");
-  lines.push("선정 근거");
-  lines.push(`• 응답자 ${totalResponses}명 중 ${candidate.avail.length}명이 참석 가능합니다`);
+  lines.push("이렇게 선정 했어요");
+  lines.push(
+    totalResponses > 0 && candidate.avail.length === totalResponses
+      ? "- 모든 참석자 가능"
+      : `- 응답자 ${totalResponses}명 중 ${candidate.avail.length}명이 참석 가능합니다`
+  );
   if (req.length) {
-    lines.push(candidate.reqOk ? `• 필수 참가자 ${req.length}명 모두 참석 가능합니다` : "• 필수 참가자 중 일부는 참석이 어렵습니다");
+    lines.push(candidate.reqOk ? `- 필수 참석자 ${req.length}명 모두 참석 가능합니다` : "- 필수 참석자 중 일부는 참석이 어렵습니다");
   }
-  if (candidate.okAny.length) lines.push(`• ${candidate.okAny.length}명에게는 선호도가 낮은 시간입니다`);
-  else lines.push("• 참석 가능한 모두가 선호하는 시간입니다");
+  if (candidate.okAny.length > 0) lines.push(`- ${candidate.okAny.length}명에게는 이 시간이 부담스러울 수있어요`);
   lines.push("");
   lines.push(`투표 결과 보기: ${pollLink(poll.id)}`);
   return lines.join("\n");

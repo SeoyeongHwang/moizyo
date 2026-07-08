@@ -19,6 +19,14 @@ function responseCount(id: string): number {
   return row.c;
 }
 
+function isDateKey(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isWeekdayKey(value: unknown): value is string {
+  return typeof value === "string" && /^weekday-[0-6]$/.test(value);
+}
+
 function requirePoll(req: express.Request, res: express.Response): PollRow | null {
   const row = getPollRow(String(req.params.id));
   if (!row) {
@@ -30,15 +38,17 @@ function requirePoll(req: express.Request, res: express.Response): PollRow | nul
 
 // ---- create poll ----
 app.post("/api/polls", (req, res) => {
-  const { type, purpose, dates, startHour, endHour, dur } = req.body ?? {};
+  const { purpose, dates, startHour, endHour, dur } = req.body ?? {};
 
-  if (typeof type !== "string" || !type.trim()) {
-    return res.status(400).json({ error: "type_required" });
-  }
   if (typeof purpose !== "string" || !purpose.trim()) {
     return res.status(400).json({ error: "purpose_required" });
   }
-  if (!Array.isArray(dates) || dates.length < 1 || dates.length > 7 || !dates.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d))) {
+  const dateModeValid =
+    Array.isArray(dates) &&
+    dates.length >= 1 &&
+    dates.length <= 7 &&
+    (dates.every(isDateKey) || dates.every(isWeekdayKey));
+  if (!dateModeValid) {
     return res.status(400).json({ error: "dates_invalid" });
   }
   if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || startHour < 0 || endHour > 24 || endHour <= startHour) {
@@ -53,7 +63,7 @@ app.post("/api/polls", (req, res) => {
   db.prepare(
     `INSERT INTO polls (id, type, purpose, dates, start_hour, end_hour, dur, required, final, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, '[]', NULL, ?)`
-  ).run(id, type.trim(), purpose.trim(), JSON.stringify([...dates].sort()), startHour, endHour, dur, createdAt);
+  ).run(id, "", purpose.trim(), JSON.stringify([...dates].sort()), startHour, endHour, dur, createdAt);
 
   const row = getPollRow(id)!;
   res.status(201).json(toMeta(row, 0));

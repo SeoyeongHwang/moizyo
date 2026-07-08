@@ -3,7 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { checkNameExists, getPoll } from "../lib/api";
 import type { PollMeta } from "../lib/scheduling";
 import { pollRangeLine, pollTitle } from "../lib/scheduling";
-import { pagePadding, PrimaryButton, textInput } from "../components/ui";
+import { PrimaryButton } from "../components/ui";
+import { captionText, fieldLabel, metaText, pagePadding, pageTitle, sectionTitle, textInput } from "../components/uiStyles";
 
 export function JoinPage() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +47,7 @@ export function JoinPage() {
   if (notFound) {
     return (
       <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 20, fontWeight: 600 }}>투표를 찾을 수 없습니다</div>
+        <div style={sectionTitle}>투표를 찾을 수 없습니다</div>
       </div>
     );
   }
@@ -68,15 +69,13 @@ export function JoinPage() {
           }}
         >
           <div>
-            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.625px", lineHeight: 1.23, marginBottom: 6 }}>
+            <div style={{ ...pageTitle, marginBottom: 6 }}>
               {pollTitle(poll)}
             </div>
-            <div style={{ fontSize: 14, color: "var(--color-ink-muted)", lineHeight: 1.43 }}>{pollRangeLine(poll)}</div>
+            <div style={metaText}>{pollRangeLine(poll)}</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.125px", color: "var(--color-ink-muted)" }}>
-              이름
-            </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={fieldLabel}>이름</label>
             <input
               value={name}
               onChange={(e) => {
@@ -89,14 +88,11 @@ export function JoinPage() {
               placeholder="이름을 입력하세요"
               style={{ ...textInput, padding: 9 }}
             />
-            {error && <div style={{ fontSize: 13, color: "var(--color-danger)" }}>{error}</div>}
+            {error && <div style={{ ...captionText, color: "var(--color-danger)" }}>{error}</div>}
           </div>
           <PrimaryButton onClick={onJoin} disabled={checking}>
-            계속하기
+            투표하기
           </PrimaryButton>
-          <div style={{ fontSize: 13, color: "var(--color-ink-faint)", lineHeight: 1.45 }}>
-            다른 참가자의 응답은 입력이 끝날 때까지 표시되지 않아요. 눈치 보지 말고 솔직하게 입력해 주세요.
-          </div>
         </div>
       </div>
     </div>

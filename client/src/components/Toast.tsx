@@ -8,10 +8,12 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState("");
+  const [toastKey, setToastKey] = useState(0);
   const timerRef = useRef<number | undefined>(undefined);
 
   const showToast = useCallback((msg: string) => {
     window.clearTimeout(timerRef.current);
+    setToastKey((key) => key + 1);
     setMessage(msg);
     timerRef.current = window.setTimeout(() => setMessage(""), 2200);
   }, []);
@@ -19,26 +21,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 28,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-hairline)",
-          borderRadius: 16,
-          padding: "10px 18px",
-          fontSize: 14,
-          fontWeight: 500,
-          boxShadow: "var(--shadow-2)",
-          display: message ? "block" : "none",
-          zIndex: 60,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {message}
-      </div>
+      {message && (
+        <div key={toastKey} className="app-toast" role="status" aria-live="polite">
+          {message}
+        </div>
+      )}
     </ToastContext.Provider>
   );
 }

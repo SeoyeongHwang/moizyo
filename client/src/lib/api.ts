@@ -22,7 +22,6 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export interface CreatePollInput {
-  type: string;
   purpose: string;
   dates: string[];
   startHour: number;

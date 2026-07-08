@@ -19,7 +19,6 @@ export interface FinalSlot {
 
 export interface PollMeta {
   id: string;
-  type: string;
   purpose: string;
   dates: string[];
   startHour: number;
@@ -35,7 +34,6 @@ export type Marks = Record<string, "best" | "ok">;
 export function toMeta(row: PollRow, responseCount: number): PollMeta {
   return {
     id: row.id,
-    type: row.type,
     purpose: row.purpose,
     dates: JSON.parse(row.dates),
     startHour: row.start_hour,

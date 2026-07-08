@@ -1,7 +1,9 @@
 :root {
-  --color-primary: #0075de;
-  --color-primary-active: #005bab;
-  --color-secondary: #213183;
+  --color-primary: #343230;
+  --color-primary-active: #1f1e1c;
+  --color-primary-soft: #efeeeb;
+  --color-primary-ring: rgba(52, 50, 48, 0.16);
+  --color-secondary: #6a655f;
   --color-on-primary: #ffffff;
   --color-canvas: #ffffff;
   --color-canvas-soft: #f6f5f4;
@@ -12,8 +14,12 @@
   --color-ink-faint: #a39e98;
   --color-hairline: #e6e6e6;
   --color-input-border: #dddddd;
-  --color-best: #1aae39;
-  --color-ok: #f0b429;
+  --color-best: #10c49a;
+  --color-best-rgb: 16, 196, 154;
+  --color-best-text: #047866;
+  --color-ok: #f7d84a;
+  --color-ok-rgb: 247, 216, 74;
+  --color-ok-text: #765900;
   --color-warn-text: #793400;
   --color-warn-bg: rgba(221, 91, 0, 0.07);
   --color-danger: #dd5b00;
@@ -27,6 +33,9 @@
 
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 18px rgba(0, 0, 0, 0.04);
   --shadow-2: 0 4px 18px rgba(0, 0, 0, 0.1);
+
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
 }
 
 * {
@@ -38,9 +47,14 @@ body {
   margin: 0;
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
   background: var(--color-canvas-soft);
-  font-family: Inter, -apple-system, system-ui, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   color: var(--color-ink);
 }
 
@@ -69,4 +83,305 @@ a:hover {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+.accordion-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-6px);
+  transition-property: grid-template-rows, opacity, transform;
+  transition-duration: 170ms, 140ms, 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1), ease-out, ease-out;
+}
+
+.accordion-panel[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  transition-duration: 240ms, 180ms, 180ms;
+}
+
+.accordion-panel__content {
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  transition-property: padding-top;
+  transition-duration: 170ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.accordion-panel[data-open="true"] .accordion-panel__content {
+  padding-top: 8px;
+  transition-duration: 240ms;
+}
+
+.results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 20px;
+  align-items: start;
+}
+
+.results-side-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.time-detail-card {
+  position: relative;
+  --time-detail-bg: #2f2d2a;
+  --time-detail-border: rgba(255, 255, 255, 0.13);
+  --time-detail-ink: #ffffff;
+  --time-detail-muted: rgba(255, 255, 255, 0.72);
+  --time-detail-chip-bg: rgba(255, 255, 255, 0.13);
+  --time-detail-chip-border: rgba(255, 255, 255, 0.18);
+  --time-detail-chip-text: rgba(255, 255, 255, 0.88);
+  --time-detail-chip-available-bg: rgba(var(--color-best-rgb), 0.2);
+  --time-detail-chip-available-border: rgba(126, 232, 207, 0.42);
+  --time-detail-chip-available-text: #8ee9d6;
+  --time-detail-warn-bg: rgba(255, 172, 89, 0.17);
+  --time-detail-warn-border: rgba(255, 190, 120, 0.24);
+  --time-detail-warn-text: #ffd0a1;
+}
+
+.time-detail-card::before {
+  content: "";
+  position: absolute;
+  top: 30px;
+  left: -8px;
+  width: 16px;
+  height: 16px;
+  border-left: 1px solid var(--time-detail-border);
+  border-bottom: 1px solid var(--time-detail-border);
+  border-bottom-left-radius: 3px;
+  background: var(--time-detail-bg);
+  transform: rotate(45deg);
+  z-index: 0;
+}
+
+.time-detail-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.recommendation-panel-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 2px 0;
+}
+
+.recommendation-carousel-heading {
+  min-width: 0;
+}
+
+.recommendation-confirm-button {
+  justify-self: end;
+}
+
+.recommendation-carousel {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  margin: 0 -2px;
+  padding: 2px 2px 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  scrollbar-gutter: stable;
+  transition-property: opacity, filter;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-empty {
+  grid-column: 1 / -1;
+}
+
+.recommendation-carousel[data-updating="true"] {
+  opacity: 0.38;
+  filter: saturate(0.52) brightness(0.96);
+}
+
+.recommendation-carousel-card {
+  flex: 0 0 clamp(238px, 31vw, 300px);
+  min-height: 176px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  scroll-snap-align: start;
+  transition-property: border-color, background-color, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-carousel-card:active {
+  transform: scale(0.96);
+}
+
+.recommendation-carousel-card:disabled:hover,
+.recommendation-carousel-card:disabled:active {
+  transform: none;
+}
+
+.recommendation-carousel-card:focus-visible {
+  outline: 2px solid var(--color-primary-ring);
+  outline-offset: 2px;
+}
+
+.confirmation-modal-overlay {
+  animation: confirmation-backdrop-in 180ms ease-out both;
+}
+
+.confirmation-modal-dialog {
+  position: relative;
+  z-index: 1;
+  animation: confirmation-dialog-in 280ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.app-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  z-index: 60;
+  max-width: min(calc(100vw - 40px), 520px);
+  padding: 11px 18px;
+  border-radius: 12px;
+  background: rgba(31, 30, 28, 0.96);
+  color: #ffffff;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22), 0 3px 10px rgba(0, 0, 0, 0.18);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: toast-pop 2200ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes confirmation-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirmation-dialog-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-pop {
+  0% {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translate(-50%, 18px) scale(0.92);
+  }
+
+  8% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(-50%, -5px) scale(1.04);
+  }
+
+  15% {
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  84% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate(-50%, 0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translate(-50%, -10px) scale(0.98);
+  }
+}
+
+@media (max-width: 767px) {
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .time-detail-card::before {
+    top: -8px;
+    left: 28px;
+    border: 0;
+    border-left: 1px solid var(--time-detail-border);
+    border-top: 1px solid var(--time-detail-border);
+    border-top-left-radius: 3px;
+  }
+
+  .recommendation-carousel-heading {
+    order: 1;
+  }
+
+  .recommendation-carousel,
+  .recommendation-empty {
+    order: 2;
+  }
+
+  .recommendation-confirm-button {
+    order: 3;
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .recommendation-carousel-card {
+    flex-basis: min(82vw, 300px);
+    min-height: 180px;
+  }
+
+  .app-toast {
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-panel,
+  .accordion-panel__content,
+  .recommendation-carousel,
+  .recommendation-carousel-card,
+  .confirmation-modal-overlay,
+  .confirmation-modal-dialog,
+  .app-toast {
+    transform: none;
+    filter: none;
+    animation: none;
+    transition-duration: 1ms;
+  }
+
+  .app-toast {
+    transform: translateX(-50%);
+  }
+
+  .recommendation-carousel-card:hover,
+  .recommendation-carousel-card:active {
+    transform: none;
+  }
 }
