@@ -6,6 +6,9 @@ export const pagePadding: CSSProperties = {
   justifyContent: "center",
 };
 
+export const postIntroContentGap = 28;
+export const controlActionGap = postIntroContentGap + 8;
+
 export const card: CSSProperties = {
   background: "transparent",
   border: 0,

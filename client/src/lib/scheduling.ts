@@ -1,6 +1,6 @@
 // Ported from the "언제볼까 MVP" design prototype's scheduling logic.
 
-export const SLOT_MINUTES = 30;
+export const SLOT_MINUTES = 15;
 
 export type Category = "best" | "ok";
 export type Marks = Record<string, Category>;
@@ -32,7 +32,6 @@ export interface Candidate {
   bestAll: string[];
   okAny: string[];
   reqOk: boolean;
-  score: number;
 }
 
 const WEEKDAYS = "일월화수목금토";
@@ -81,6 +80,67 @@ export function dateShort(dateKey: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} (${weekday(dateKey)})`;
 }
 
+function dateKeyUtcDay(dateKey: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86400000;
+}
+
+function consecutiveDateRangeLabel(dateKeys: string[]): string | null {
+  const sorted = [...dateKeys].sort();
+  const days = sorted.map(dateKeyUtcDay);
+  if (days.some((day) => day === null)) return null;
+  for (let i = 1; i < days.length; i += 1) {
+    if (days[i]! - days[i - 1]! !== 1) return null;
+  }
+  return `${dateLabel(sorted[0])}부터 ${dateLabel(sorted[sorted.length - 1])}까지`;
+}
+
+function consecutiveWeekdayRangeLabel(dateKeys: string[]): string | null {
+  const indices = dateKeys.map(weekdayIndex);
+  if (indices.some((index) => index === null)) return null;
+  const unique = Array.from(new Set(indices as number[])).sort((a, b) => a - b);
+  if (unique.length !== dateKeys.length) return null;
+  if (unique.length === WEEKDAY_LABELS.length) {
+    return `${WEEKDAY_LABELS[0]}부터 ${WEEKDAY_LABELS[WEEKDAY_LABELS.length - 1]}까지`;
+  }
+
+  const selected = new Set(unique);
+  const start = unique.find((candidate) => {
+    for (let offset = 0; offset < unique.length; offset += 1) {
+      if (!selected.has((candidate + offset) % WEEKDAY_LABELS.length)) return false;
+    }
+    return true;
+  });
+  if (start === undefined) return null;
+
+  const end = (start + unique.length - 1) % WEEKDAY_LABELS.length;
+  return `${WEEKDAY_LABELS[start]}부터 ${WEEKDAY_LABELS[end]}까지`;
+}
+
+function dateSelectionLabel(dateKeys: string[]): string {
+  if (dateKeys.length === 1) return dateLabel(dateKeys[0]);
+
+  if (dateKeys.every(isWeekdayKey)) {
+    return consecutiveWeekdayRangeLabel(dateKeys) ?? `${dateLabel(dateKeys[0])} 외 ${dateKeys.length - 1}개 요일`;
+  }
+
+  return consecutiveDateRangeLabel(dateKeys) ?? `${dateLabel(dateKeys[0])} 외 ${dateKeys.length - 1}일`;
+}
+
+function durationLabel(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0 && mins > 0) return `${hours}시간 ${mins}분`;
+  if (hours > 0) return `${hours}시간`;
+  return `${mins}분`;
+}
+
+function dateSelectionScopeLabel(dateKeys: string[]): string {
+  return dateSelectionLabel(dateKeys).replace(/까지$/, "");
+}
+
 export function nextDays(n: number): string[] {
   const out: string[] = [];
   const t = new Date();
@@ -104,13 +164,15 @@ export function pollTitle(poll: { purpose: string }): string {
 }
 
 export function pollRangeLine(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
-  const isWeekdayPoll = poll.dates.every(isWeekdayKey);
-  const extra = poll.dates.length > 1 ? ` 외 ${poll.dates.length - 1}${isWeekdayPoll ? "개 요일" : "일"}` : "";
-  return `${dateLabel(poll.dates[0])}${extra} ${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 중, ${poll.dur}분 예상`;
+  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 ${poll.dur}분 예상`;
+}
+
+export function pollParticipationGuide(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
+  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 가능한 시간을 알려주세요.\n미팅은 ${durationLabel(poll.dur)} 정도로 예상됩니다.`;
 }
 
 export function responseCountText(total: number): string {
-  return total ? `현재 ${total}명 응답 완료` : "아직 응답이 없습니다";
+  return total ? `현재 ${total}명 응답 완료` : "0명 응답";
 }
 
 export function keyTitle(key: string): string {
@@ -122,6 +184,42 @@ export function keyTitle(key: string): string {
 
 export function pollLink(pollId: string): string {
   return `${window.location.origin}/vote/${pollId}`;
+}
+
+export function pollJoinLink(pollId: string): string {
+  return `${window.location.origin}/vote/${pollId}/join`;
+}
+
+// 동명이인 can submit under the same display name; the recommendation
+// engine below identifies people purely by the key in a Record<string, Marks>,
+// so give each duplicate a distinguishing label ("영희 (2)") in submission
+// order before feeding results into it.
+export interface LabeledResponseEntry {
+  id: number;
+  name: string;
+  label: string;
+  marks: Marks;
+}
+
+export function labelResponseEntries(entries: { id: number; name: string; marks: Marks }[]): LabeledResponseEntry[] {
+  const seenCounts: Record<string, number> = {};
+  return entries.map(({ id, name, marks }) => {
+    const count = (seenCounts[name] = (seenCounts[name] ?? 0) + 1);
+    return {
+      id,
+      name,
+      label: count === 1 ? name : `${name} (${count})`,
+      marks,
+    };
+  });
+}
+
+export function dedupeResponseNames(entries: { id: number; name: string; marks: Marks }[]): Record<string, Marks> {
+  const result: Record<string, Marks> = {};
+  labelResponseEntries(entries).forEach(({ label, marks }) => {
+    result[label] = marks;
+  });
+  return result;
 }
 
 export interface AggEntry {
@@ -172,6 +270,8 @@ export function candidates(poll: PollMeta, responses: Record<string, Marks>): Ca
   const k = Math.max(1, Math.round(poll.dur / SLOT_MINUTES));
   const sl = slots(poll);
   const all: Candidate[] = [];
+  const dateOrder = new Map(poll.dates.map((date, index) => [date, index]));
+  const reqAvailCount = (candidate: Candidate) => req.filter((n) => candidate.avail.includes(n)).length;
 
   poll.dates.forEach((d) => {
     for (let i = 0; i + k <= sl.length; i++) {
@@ -179,26 +279,59 @@ export function candidates(poll: PollMeta, responses: Record<string, Marks>): Ca
       const endMin = sl[i] + k * SLOT_MINUTES;
       const { keys, avail, bestAll, okAny, reqOk } = evaluateSlot(poll, responses, d, startMin, endMin);
       if (!avail.length) continue;
-      const reqAvail = req.filter((n) => avail.includes(n)).length;
-      const score = (reqOk ? 100000 : 0) + reqAvail * 5000 + avail.length * 100 + bestAll.length * 10 - okAny.length;
-      all.push({ date: d, startMin, endMin, keys, avail, bestAll, okAny, reqOk, score });
+      all.push({ date: d, startMin, endMin, keys, avail, bestAll, okAny, reqOk });
     }
   });
 
-  all.sort((a, b) => b.score - a.score);
+  all.sort((a, b) => {
+    if (req.length) {
+      const reqOkDiff = Number(b.reqOk) - Number(a.reqOk);
+      if (reqOkDiff) return reqOkDiff;
+
+      const reqAvailDiff = reqAvailCount(b) - reqAvailCount(a);
+      if (reqAvailDiff) return reqAvailDiff;
+    }
+
+    return (
+      b.avail.length - a.avail.length ||
+      b.bestAll.length - a.bestAll.length ||
+      (dateOrder.get(a.date) ?? 0) - (dateOrder.get(b.date) ?? 0) ||
+      a.startMin - b.startMin ||
+      a.endMin - b.endMin
+    );
+  });
   const picked: Candidate[] = [];
   for (const c of all) {
     if (picked.length >= 3) break;
-    if (picked.some((p) => p.date === c.date && !(c.endMin <= p.startMin || c.startMin >= p.endMin))) continue;
+    if (picked.some((p) => p.date === c.date && c.startMin < p.endMin && c.endMin > p.startMin)) continue;
     picked.push(c);
   }
   return picked;
 }
 
+export function recommendationHighlight(
+  candidate: { avail: string[]; okAny: string[] },
+  otherCandidates: Array<{ okAny: string[] }>,
+  total: number
+): string | null {
+  const burdened = candidate.okAny.length;
+  if (burdened === 0) {
+    return total > 0 && candidate.avail.length === total
+      ? "모두가 선호하는 시간"
+      : "참석 가능한 모두가 선호하는 시간";
+  }
+  const minBurdened = Math.min(...otherCandidates.map((c) => c.okAny.length));
+  if (otherCandidates.length > 1 && burdened === minBurdened) {
+    return "많은 참석자가 가장 부담 덜 한 시간";
+  }
+  return null;
+}
+
 export function buildConfirmationMessage(
   candidate: { date: string; startMin: number; endMin: number; avail: string[]; okAny: string[]; reqOk: boolean },
   poll: PollMeta,
-  totalResponses: number
+  totalResponses: number,
+  otherCandidates: Array<{ okAny: string[] }> = [candidate]
 ): string {
   const req = poll.required || [];
   const lines: string[] = [];
@@ -206,17 +339,18 @@ export function buildConfirmationMessage(
   lines.push("");
   lines.push(`일시: ${dateLabel(candidate.date)} ${fmtMin(candidate.startMin)} ~ ${fmtMin(candidate.endMin)}`);
   lines.push("");
-  lines.push("이렇게 선정 했어요");
+  lines.push("이렇게 정했어요");
+  if (req.length) {
+    lines.push(candidate.reqOk ? "- 필수 참석자 모두 가능" : "- 필수 참석자 일부 불가");
+  }
   lines.push(
     totalResponses > 0 && candidate.avail.length === totalResponses
       ? "- 모든 참석자 가능"
-      : `- 응답자 ${totalResponses}명 중 ${candidate.avail.length}명이 참석 가능합니다`
+      : `- ${totalResponses}명 중 ${candidate.avail.length}명 가능`
   );
-  if (req.length) {
-    lines.push(candidate.reqOk ? `- 필수 참석자 ${req.length}명 모두 참석 가능합니다` : "- 필수 참석자 중 일부는 참석이 어렵습니다");
-  }
-  if (candidate.okAny.length > 0) lines.push(`- ${candidate.okAny.length}명에게는 이 시간이 부담스러울 수있어요`);
+  const highlight = recommendationHighlight(candidate, otherCandidates, totalResponses);
+  if (highlight) lines.push(`- ${highlight}`);
   lines.push("");
-  lines.push(`투표 결과 보기: ${pollLink(poll.id)}`);
+  lines.push(`결과 보기: ${pollLink(poll.id)}`);
   return lines.join("\n");
 }

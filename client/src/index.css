@@ -270,7 +270,9 @@ a:hover {
 }
 
 .recommendation-carousel-card {
-  flex: 0 0 clamp(238px, 31vw, 300px);
+  position: relative;
+  flex: 1 0 calc((100% - 20px) / 3);
+  min-width: min(270px, calc((100% - 20px) / 3));
   min-height: 176px;
   display: flex;
   flex-direction: column;
@@ -282,18 +284,63 @@ a:hover {
   cursor: pointer;
   text-align: left;
   scroll-snap-align: start;
-  transition-property: border-color, background-color, box-shadow, transform;
+  transition-property: border-color, background-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  overflow: hidden;
+}
+
+.recommendation-carousel-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(var(--color-best-rgb), 0.045);
+  box-shadow: inset 0 0 0 1px rgba(var(--color-best-rgb), 0.16);
+  opacity: 0;
+  pointer-events: none;
+  transition-property: opacity;
   transition-duration: 150ms;
   transition-timing-function: ease-out;
 }
 
-.recommendation-carousel-card:active {
+.recommendation-carousel-card[aria-selected="false"]:not([aria-disabled="true"]):hover::before {
+  opacity: 1;
+}
+
+.recommendation-carousel-card-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  transform-origin: center;
+  transition-property: transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-carousel-card:active .recommendation-carousel-card-inner {
   transform: scale(0.96);
 }
 
-.recommendation-carousel-card[aria-disabled="true"]:hover,
-.recommendation-carousel-card[aria-disabled="true"]:active {
+.recommendation-carousel-card[aria-disabled="true"]:active .recommendation-carousel-card-inner {
   transform: none;
+}
+
+.recommendation-card-time {
+  min-width: max-content;
+  display: flex;
+  align-items: baseline;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .recommendation-carousel-card:focus-visible {
@@ -312,8 +359,8 @@ a:hover {
   padding: 0;
   border: none;
   border-radius: 8px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: rgba(0, 0, 0, 0.055);
+  color: rgba(0, 0, 0, 0.68);
   cursor: pointer;
   transition-property: background-color, color, transform;
   transition-duration: 140ms;
@@ -321,7 +368,7 @@ a:hover {
 }
 
 .recommendation-card-share:hover {
-  background: var(--color-primary);
+  background: rgba(0, 0, 0, 0.72);
   color: #ffffff;
 }
 
@@ -340,8 +387,8 @@ a:hover {
 }
 
 .recommendation-card-share:disabled:hover {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: rgba(0, 0, 0, 0.055);
+  color: rgba(0, 0, 0, 0.68);
 }
 
 .confirmation-modal-overlay {
@@ -452,6 +499,7 @@ a:hover {
   .accordion-panel__content,
   .recommendation-carousel,
   .recommendation-carousel-card,
+  .recommendation-carousel-card-inner,
   .confirmation-modal-overlay,
   .confirmation-modal-dialog,
   .app-toast {
@@ -465,8 +513,8 @@ a:hover {
     transform: translateX(-50%);
   }
 
-  .recommendation-carousel-card:hover,
-  .recommendation-carousel-card:active {
+  .recommendation-carousel-card:hover .recommendation-carousel-card-inner,
+  .recommendation-carousel-card:active .recommendation-carousel-card-inner {
     transform: none;
   }
 }

@@ -4,7 +4,17 @@ import { nanoid } from "nanoid";
 import { db } from "./db.js";
 import { SLOT_MINUTES } from "./constants.js";
 import { pickDemoNames, seedMarks } from "./scheduling.js";
-import { toMeta, type PollRow, type Marks } from "./types.js";
+import { toMeta, sanitizeMarks, type PollRow, type ResponseEntry } from "./types.js";
+import { hashPassword, verifyPassword } from "./auth.js";
+
+const MIN_PASSWORD_LENGTH = 4;
+
+interface ResponseRow {
+  id: number;
+  name: string;
+  marks: string;
+  password_hash: string;
+}
 
 const app = express();
 app.use(cors());
@@ -34,6 +44,42 @@ function requirePoll(req: express.Request, res: express.Response): PollRow | nul
     return null;
   }
   return row;
+}
+
+function isValidDuration(row: PollRow, duration: unknown): duration is number {
+  if (typeof duration !== "number" || !Number.isInteger(duration)) return false;
+  return (
+    duration > 0 &&
+    duration % SLOT_MINUTES === 0 &&
+    duration <= (row.end_hour - row.start_hour) * 60
+  );
+}
+
+function serializeFinalSlot(row: PollRow, final: unknown, duration: number): string | null {
+  if (
+    !final ||
+    typeof final !== "object" ||
+    typeof (final as { date?: unknown }).date !== "string" ||
+    !Number.isInteger((final as { startMin?: unknown }).startMin) ||
+    !Number.isInteger((final as { endMin?: unknown }).endMin)
+  ) {
+    return null;
+  }
+
+  const { date, startMin, endMin } = final as { date: string; startMin: number; endMin: number };
+  const dates = JSON.parse(row.dates) as string[];
+  const expectedEndMin = startMin + duration;
+  if (
+    !dates.includes(date) ||
+    startMin < row.start_hour * 60 ||
+    startMin % SLOT_MINUTES !== 0 ||
+    endMin !== expectedEndMin ||
+    expectedEndMin > row.end_hour * 60
+  ) {
+    return null;
+  }
+
+  return JSON.stringify({ date, startMin, endMin: expectedEndMin });
 }
 
 // ---- create poll ----
@@ -76,47 +122,109 @@ app.get("/api/polls/:id", (req, res) => {
   res.json(toMeta(row, responseCount(row.id)));
 });
 
-// ---- name availability check ----
-app.get("/api/polls/:id/responses/:name/exists", (req, res) => {
+// ---- check whether a name+password pair matches an existing response.
+//      Names aren't unique (동명이인 can share one), so a mismatch is
+//      indistinguishable from "no such response yet" — both just mean
+//      the caller is about to create a new entry, not an error. ----
+app.post("/api/polls/:id/responses/:name/check", (req, res) => {
   const row = requirePoll(req, res);
   if (!row) return;
+
+  const { password } = req.body ?? {};
+  if (typeof password !== "string") {
+    return res.status(400).json({ error: "password_required" });
+  }
+
   const name = req.params.name.trim();
-  const existing = db
-    .prepare("SELECT 1 FROM responses WHERE poll_id = ? AND name = ?")
-    .get(row.id, name);
-  res.json({ exists: !!existing });
+  const candidates = db
+    .prepare("SELECT id, name, marks, password_hash FROM responses WHERE poll_id = ? AND name = ?")
+    .all(row.id, name) as ResponseRow[];
+  const match = candidates.find((c) => verifyPassword(password, c.password_hash));
+
+  if (!match) {
+    return res.json({ status: "new" });
+  }
+  res.json({ status: "ok", id: match.id, marks: JSON.parse(match.marks) });
 });
 
-// ---- submit a participant's response ----
+// ---- submit a participant's response (names may repeat; each row is its own identity) ----
 app.post("/api/polls/:id/responses", (req, res) => {
   const row = requirePoll(req, res);
   if (!row) return;
 
-  const { name, marks } = req.body ?? {};
+  const { name, password, marks } = req.body ?? {};
   if (typeof name !== "string" || !name.trim()) {
     return res.status(400).json({ error: "name_required" });
   }
-  if (!marks || typeof marks !== "object" || Array.isArray(marks)) {
+  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: "password_invalid" });
+  }
+  const cleanMarks = sanitizeMarks(marks);
+  if (!cleanMarks) {
     return res.status(400).json({ error: "marks_invalid" });
-  }
-  const cleanMarks: Marks = {};
-  for (const [k, v] of Object.entries(marks as Record<string, unknown>)) {
-    if (v === "best" || v === "ok") cleanMarks[k] = v;
-  }
-
-  const trimmed = name.trim();
-  const existing = db
-    .prepare("SELECT 1 FROM responses WHERE poll_id = ? AND name = ?")
-    .get(row.id, trimmed);
-  if (existing) {
-    return res.status(409).json({ error: "duplicate_name" });
   }
 
   db.prepare(
-    "INSERT INTO responses (poll_id, name, marks, submitted_at) VALUES (?, ?, ?, ?)"
-  ).run(row.id, trimmed, JSON.stringify(cleanMarks), Date.now());
+    "INSERT INTO responses (poll_id, name, marks, submitted_at, password_hash) VALUES (?, ?, ?, ?, ?)"
+  ).run(row.id, name.trim(), JSON.stringify(cleanMarks), Date.now(), hashPassword(password));
 
   res.status(201).json({ ok: true });
+});
+
+// ---- edit an existing participant's response, addressed by row id ----
+app.put("/api/polls/:id/responses/:responseId", (req, res) => {
+  const row = requirePoll(req, res);
+  if (!row) return;
+
+  const responseId = Number(req.params.responseId);
+  if (!Number.isInteger(responseId)) {
+    return res.status(404).json({ error: "response_not_found" });
+  }
+
+  const { password, marks } = req.body ?? {};
+  if (typeof password !== "string") {
+    return res.status(400).json({ error: "password_required" });
+  }
+  const cleanMarks = sanitizeMarks(marks);
+  if (!cleanMarks) {
+    return res.status(400).json({ error: "marks_invalid" });
+  }
+
+  const existing = db
+    .prepare("SELECT password_hash FROM responses WHERE id = ? AND poll_id = ?")
+    .get(responseId, row.id) as Pick<ResponseRow, "password_hash"> | undefined;
+  if (!existing) {
+    return res.status(404).json({ error: "response_not_found" });
+  }
+  if (!verifyPassword(password, existing.password_hash)) {
+    return res.status(403).json({ error: "invalid_password" });
+  }
+
+  db.prepare("UPDATE responses SET marks = ?, submitted_at = ? WHERE id = ?").run(
+    JSON.stringify(cleanMarks),
+    Date.now(),
+    responseId
+  );
+
+  res.json({ ok: true });
+});
+
+// ---- delete an existing participant response, addressed by row id ----
+app.delete("/api/polls/:id/responses/:responseId", (req, res) => {
+  const row = requirePoll(req, res);
+  if (!row) return;
+
+  const responseId = Number(req.params.responseId);
+  if (!Number.isInteger(responseId)) {
+    return res.status(404).json({ error: "response_not_found" });
+  }
+
+  const result = db.prepare("DELETE FROM responses WHERE id = ? AND poll_id = ?").run(responseId, row.id);
+  if (result.changes === 0) {
+    return res.status(404).json({ error: "response_not_found" });
+  }
+
+  res.json({ ok: true });
 });
 
 // ---- full results (aggregated view is computed client-side) ----
@@ -124,24 +232,28 @@ app.get("/api/polls/:id/results", (req, res) => {
   const row = requirePoll(req, res);
   if (!row) return;
   const rows = db
-    .prepare("SELECT name, marks FROM responses WHERE poll_id = ?")
-    .all(row.id) as { name: string; marks: string }[];
-  const responses: Record<string, Marks> = {};
-  rows.forEach((r) => {
-    responses[r.name] = JSON.parse(r.marks);
-  });
+    .prepare("SELECT id, name, marks FROM responses WHERE poll_id = ? ORDER BY id ASC")
+    .all(row.id) as { id: number; name: string; marks: string }[];
+  const responses: ResponseEntry[] = rows.map((r) => ({ id: r.id, name: r.name, marks: JSON.parse(r.marks) }));
   res.json({ poll: toMeta(row, rows.length), responses });
 });
 
-// ---- update required participants / final decision ----
+// ---- update duration / required participants / final decision ----
 app.patch("/api/polls/:id", (req, res) => {
   const row = requirePoll(req, res);
   if (!row) return;
 
-  const { required, final } = req.body ?? {};
+  const { required, final, dur } = req.body ?? {};
+  let nextDur = row.dur;
   let nextRequired = row.required;
   let nextFinal = row.final;
 
+  if (dur !== undefined) {
+    if (!isValidDuration(row, dur)) {
+      return res.status(400).json({ error: "duration_invalid" });
+    }
+    nextDur = dur;
+  }
   if (required !== undefined) {
     if (!Array.isArray(required) || !required.every((n) => typeof n === "string")) {
       return res.status(400).json({ error: "required_invalid" });
@@ -151,19 +263,21 @@ app.patch("/api/polls/:id", (req, res) => {
   if (final !== undefined) {
     if (final === null) {
       nextFinal = null;
-    } else if (
-      typeof final === "object" &&
-      typeof final.date === "string" &&
-      Number.isInteger(final.startMin) &&
-      Number.isInteger(final.endMin)
-    ) {
-      nextFinal = JSON.stringify({ date: final.date, startMin: final.startMin, endMin: final.endMin });
     } else {
-      return res.status(400).json({ error: "final_invalid" });
+      const serializedFinal = serializeFinalSlot(row, final, nextDur);
+      if (!serializedFinal) {
+        return res.status(400).json({ error: "final_invalid" });
+      }
+      nextFinal = serializedFinal;
     }
   }
 
-  db.prepare("UPDATE polls SET required = ?, final = ? WHERE id = ?").run(nextRequired, nextFinal, row.id);
+  db.prepare("UPDATE polls SET dur = ?, required = ?, final = ? WHERE id = ?").run(
+    nextDur,
+    nextRequired,
+    nextFinal,
+    row.id
+  );
   const updated = getPollRow(row.id)!;
   res.json(toMeta(updated, responseCount(row.id)));
 });

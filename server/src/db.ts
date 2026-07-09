@@ -27,7 +27,36 @@ db.exec(`
     poll_id TEXT NOT NULL REFERENCES polls(id),
     name TEXT NOT NULL,
     marks TEXT NOT NULL,
-    submitted_at INTEGER NOT NULL,
-    UNIQUE(poll_id, name)
+    submitted_at INTEGER NOT NULL
   );
 `);
+
+const responseColumns = db.prepare("PRAGMA table_info(responses)").all() as { name: string }[];
+if (!responseColumns.some((c) => c.name === "password_hash")) {
+  db.exec("ALTER TABLE responses ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''");
+}
+
+// Same-named participants (동명이인) are distinguished by id + password, not by name,
+// so the old UNIQUE(poll_id, name) constraint has to go. SQLite can't drop a
+// constraint in place, so rebuild the table without it when it's still present.
+const responseTableSql = (
+  db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'responses'").get() as
+    | { sql: string }
+    | undefined
+)?.sql;
+if (responseTableSql?.includes("UNIQUE(poll_id, name)")) {
+  db.exec(`
+    CREATE TABLE responses_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      poll_id TEXT NOT NULL REFERENCES polls(id),
+      name TEXT NOT NULL,
+      marks TEXT NOT NULL,
+      submitted_at INTEGER NOT NULL,
+      password_hash TEXT NOT NULL DEFAULT ''
+    );
+    INSERT INTO responses_new (id, poll_id, name, marks, submitted_at, password_hash)
+      SELECT id, poll_id, name, marks, submitted_at, password_hash FROM responses;
+    DROP TABLE responses;
+    ALTER TABLE responses_new RENAME TO responses;
+  `);
+}

@@ -134,7 +134,7 @@ export function CreatePollPage() {
         endHour: fEnd,
         dur: fDur,
       });
-      navigate(`/vote/${poll.id}`);
+      navigate(`/vote/${poll.id}`, { state: { created: true } });
     } catch {
       setSubmitting(false);
     }
