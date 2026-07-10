@@ -68,7 +68,7 @@ export function PollLandingPage() {
           )}
         </div>
         <div style={{ ...supportingText, marginBottom: postIntroContentGap, whiteSpace: "pre-line" }}>
-          {isCreatorView ? "아래 링크를 참석자에게 공유할 수 있습니다." : pollParticipationGuide(poll)}
+          {isCreatorView ? "아래 링크를 참석자에게 공유해 주세요." : pollParticipationGuide(poll)}
         </div>
 
         <div style={{ ...card, alignItems: "center", gap: postIntroContentGap }}>
@@ -96,7 +96,7 @@ export function PollLandingPage() {
                 >
                   {link}
                 </div>
-                <UtilityButton onClick={() => copyText(link, () => showToast("링크가 복사되었습니다"))}>
+                <UtilityButton onClick={() => copyText(link, () => showToast("링크를 복사했어요"))}>
                   복사
                 </UtilityButton>
               </div>
@@ -128,7 +128,7 @@ function NotFoundPanel() {
   return (
     <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
       <div style={{ width: "100%", maxWidth: 440 }}>
-        <div style={{ ...sectionTitle, marginBottom: 8 }}>투표를 찾을 수 없습니다</div>
+        <div style={{ ...sectionTitle, marginBottom: 8 }}>투표를 찾을 수 없어요</div>
         <div style={supportingText}>링크가 정확한지 확인해 주세요.</div>
       </div>
     </div>

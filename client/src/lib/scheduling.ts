@@ -168,11 +168,11 @@ export function pollRangeLine(poll: { dates: string[]; startHour: number; endHou
 }
 
 export function pollParticipationGuide(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
-  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 가능한 시간을 알려주세요.\n미팅은 ${durationLabel(poll.dur)} 정도로 예상됩니다.`;
+  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 가능한 시간을 알려주세요.\n모임은 ${durationLabel(poll.dur)} 정도 진행될 예정이에요.`;
 }
 
 export function responseCountText(total: number): string {
-  return total ? `현재 ${total}명 응답 완료` : "0명 응답";
+  return total ? `현재 ${total}명 응답 완료` : "아직 응답이 없어요";
 }
 
 export function keyTitle(key: string): string {

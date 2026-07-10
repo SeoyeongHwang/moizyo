@@ -78,14 +78,14 @@ export function CreatePollPage() {
 
   const errors = useMemo(
     () => ({
-      purpose: !fPurpose.trim() ? "이벤트 이름을 입력해 주세요" : "",
+      purpose: !fPurpose.trim() ? "모임 이름을 입력해 주세요" : "",
       dates: !selDates.length
         ? dateMode === "date"
-          ? "조사할 날짜를 1개 이상 선택해 주세요"
-          : "조사할 요일을 1개 이상 선택해 주세요"
+          ? "투표할 날짜를 1개 이상 선택해 주세요"
+          : "투표할 요일을 1개 이상 선택해 주세요"
         : "",
       timeRange: fEnd <= fStart ? "끝나는 시간은 시작 시간보다 늦어야 해요" : "",
-      duration: fEnd > fStart && fDur > (fEnd - fStart) * 60 ? "소요 시간이 조사 시간대보다 길어요" : "",
+      duration: fEnd > fStart && fDur > (fEnd - fStart) * 60 ? "소요 시간이 투표 시간대보다 길어요" : "",
     }),
     [fPurpose, selDates, dateMode, fStart, fEnd, fDur]
   );
@@ -157,7 +157,7 @@ export function CreatePollPage() {
 
         <div style={card}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <label style={fieldLabel}>이벤트 이름</label>
+            <label style={fieldLabel}>모임 이름</label>
             <input
               value={fPurpose}
               onChange={(e) => setFPurpose(e.target.value)}
@@ -424,7 +424,7 @@ export function CreatePollPage() {
             }}
           >
             <PrimaryButton onClick={onCreate} disabled={!canCreate || submitting} style={{ width: "100%", minHeight: 48 }}>
-              투표 생성하기
+              투표 만들기
             </PrimaryButton>
           </div>
         </div>

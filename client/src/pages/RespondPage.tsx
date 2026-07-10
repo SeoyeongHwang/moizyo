@@ -124,7 +124,7 @@ export function RespondPage() {
   if (notFound) {
     return (
       <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
-        <div style={sectionTitle}>투표를 찾을 수 없습니다</div>
+        <div style={sectionTitle}>투표를 찾을 수 없어요</div>
       </div>
     );
   }
@@ -138,14 +138,14 @@ export function RespondPage() {
   const mutedOtherCategoryBackgroundSize = `${poll.dates.length * 100}% ${sl.length * timetableSlotHeight}px, auto`;
   const isPreferenceStep = cat === "ok";
   const showPreferenceTooltip = isPreferenceStep && !preferenceTooltipDismissed;
-  const primaryActionLabel = isPreferenceStep ? "응답 제출하기" : "다음으로";
+  const primaryActionLabel = isPreferenceStep ? "응답 제출하기" : "다음";
   const helperText = isPreferenceStep ? (
     <>
-      드래그해서 <b>가능하지만 덜 선호하는 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
+      드래그해서 <b>가능하지만 덜 선호하는 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
     </>
   ) : (
     <>
-      드래그해서 <b>가능한 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
+      드래그해서 <b>가능한 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
     </>
   );
 
@@ -295,11 +295,11 @@ export function RespondPage() {
                   </button>
                 </div>
                 {showPreferenceTooltip ? (
-                  <PreferenceTooltip id={preferenceTooltipId} name={name} onDismiss={() => setPreferenceTooltipDismissed(true)} />
+                  <PreferenceTooltip id={preferenceTooltipId} onDismiss={() => setPreferenceTooltipDismissed(true)} />
                 ) : null}
               </div>
               <div style={{ display: "flex", gap: 14, ...captionText, alignItems: "center" }}>
-                <Legend color="var(--color-best)" label="선호" />
+                <Legend color="var(--color-best)" label="가능" />
                 <Legend color="var(--color-ok)" label="비선호" />
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   <div style={{ width: 12, height: 12, borderRadius: 3, background: "var(--color-canvas-soft)", border: "1px solid var(--color-hairline)" }} />
@@ -398,7 +398,7 @@ export function RespondPage() {
           }}
         >
           <div style={{ flex: "1 1 180px", ...metaText }}>
-            {markedCount ? `` : "아직 선택된 시간이 없습니다"}
+            {markedCount ? `` : "아직 선택한 시간이 없어요"}
           </div>
           <PrimaryButton onClick={onPrimaryAction} disabled={!markedCount || submitting}>
             {primaryActionLabel}
@@ -418,7 +418,7 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function PreferenceTooltip({ id, name, onDismiss }: { id: string; name: string; onDismiss: () => void }) {
+function PreferenceTooltip({ id, onDismiss }: { id: string; onDismiss: () => void }) {
   return (
     <div
       id={id}
@@ -431,7 +431,7 @@ function PreferenceTooltip({ id, name, onDismiss }: { id: string; name: string; 
         className="respond-preference-tooltip__arrow"
       />
       <div className="respond-preference-tooltip__copy">
-        {name}님의 표시 여부는 공개되지 않아요.<br></br>이 시간은 가능한 한 피해서 추천해요.
+        비선호 표시는 다른 참석자에게 보이지 않아요.<br></br>추천할 때는 이 시간을 되도록 피해드려요.
       </div>
       <button type="button" className="respond-preference-tooltip__button" aria-label="안내 닫기" onClick={onDismiss}>
         <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="respond-preference-tooltip__button-icon">

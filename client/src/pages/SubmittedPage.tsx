@@ -38,7 +38,7 @@ export function SubmittedPage() {
         <div style={{ ...supportingText, marginBottom: controlActionGap }}>
           {name}님의 응답이 저장되었어요.
           <br />
-          같은 이름과 비밀번호를 이용하여 응답을 수정할 수 있어요.
+          같은 이름과 비밀번호로 언제든 응답을 수정할 수 있어요.
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
           <PrimaryButton onClick={() => navigate(`/vote/${id}/results`)}>결과 보기</PrimaryButton>

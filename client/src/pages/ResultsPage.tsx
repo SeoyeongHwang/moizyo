@@ -262,7 +262,7 @@ export function ResultsPage() {
   if (notFound) {
     return (
       <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
-        <div style={sectionTitle}>투표를 찾을 수 없습니다</div>
+        <div style={sectionTitle}>투표를 찾을 수 없어요</div>
       </div>
     );
   }
@@ -321,7 +321,7 @@ export function ResultsPage() {
       if (recommendationUpdateIdRef.current === updateId) {
         setPoll(previousPoll);
         cancelRecommendationUpdate(updateId);
-        showToast("필수 참석자 변경에 실패했습니다");
+        showToast("필수 참석자를 변경하지 못했어요. 다시 시도해 주세요");
       }
     }
   }
@@ -349,11 +349,11 @@ export function ResultsPage() {
       setPoll(updated);
       setMsgEdited(false);
       setDurationEditorOpen(false);
-      showToast("예상 소요 시간을 수정했습니다");
+      showToast("예상 소요 시간을 수정했어요");
       finishRecommendationUpdate(updateId, startedAt);
     } catch {
       cancelRecommendationUpdate(updateId);
-      showToast("예상 소요 시간 수정에 실패했습니다");
+      showToast("예상 소요 시간을 수정하지 못했어요. 다시 시도해 주세요");
     } finally {
       setSavingDuration(false);
     }
@@ -376,15 +376,15 @@ export function ResultsPage() {
         await deleteResponse(id, responseId);
         deletedCount += 1;
       }
-      showToast(`${deletedCount}개 응답을 삭제했습니다`);
+      showToast(`${deletedCount}명의 응답을 삭제했어요`);
       setSelectedResponseIds([]);
       setResponseEditorOpen(false);
     } catch {
       if (deletedCount > 0) {
         setSelectedResponseIds([]);
-        showToast(`${deletedCount}개 응답을 삭제했습니다. 일부 응답은 삭제하지 못했습니다`);
+        showToast(`${deletedCount}명의 응답을 삭제했어요. 일부는 삭제하지 못했으니 다시 시도해 주세요`);
       } else {
-        showToast("응답 삭제에 실패했습니다");
+        showToast("응답을 삭제하지 못했어요. 다시 시도해 주세요");
       }
     } finally {
       setDeletingResponses(false);
@@ -396,7 +396,7 @@ export function ResultsPage() {
   const dk = detailKey;
   const de = dk ? map[dk] || { best: [], ok: [] } : null;
   const detailTitle = dk ? detailSlotTitle(dk) : null;
-  const detailPanelTime = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려 보세요";
+  const detailPanelTime = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에서 시간을 선택해 보세요";
   const detailPeople: DetailPerson[] = names.map((name) => ({
     name,
     status: de ? (de.best.includes(name) || de.ok.includes(name) ? "available" : "unavailable") : "neutral",
@@ -460,7 +460,7 @@ export function ResultsPage() {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
               <SecondaryButton
-                onClick={() => copyText(pollJoinLink(poll.id), () => showToast("링크가 복사되었습니다"))}
+                onClick={() => copyText(pollJoinLink(poll.id), () => showToast("링크를 복사했어요"))}
                 style={{ flex: "none", whiteSpace: "nowrap", padding: "10px 20px", fontSize: 16, fontWeight: 600, minHeight: 44 }}
               >
                 응답 링크 복사
@@ -752,7 +752,7 @@ export function ResultsPage() {
                       e.currentTarget.style.background = "#fff";
                     }}
                   >
-                    수정
+                    관리
                   </button>
                 </div>
                 <NameChips people={detailPeople} />
@@ -769,7 +769,7 @@ export function ResultsPage() {
                 />
                 <AccordionPanel id={requiredPanelId} open={requiredOpen}>
                   <div style={{ ...metaText, marginBottom: 12, textWrap: "pretty" }}>
-                    필수 참석자가 가능한 시간을 우선 추천합니다.
+                    필수 참석자가 가능한 시간을 우선 추천해요.
                   </div>
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     {names.map((n) => {
@@ -800,7 +800,7 @@ export function ResultsPage() {
         ) : (
           <div style={{ padding: "24px 0 0", textAlign: "center" }}>
             <div style={supportingText}>
-              아직 응답이 없습니다.<br></br>참가자들에게 응답 링크를 공유해보세요.
+              아직 응답이 없어요.<br></br>참석자에게 응답 링크를 공유해 보세요.
             </div>
           </div>
         )}
@@ -813,7 +813,7 @@ export function ResultsPage() {
             setMsgEdited(true);
           }}
           onClose={() => setMessageModalOpen(false)}
-          onCopy={() => copyText(msgText, () => showToast("클립보드에 복사되었습니다"))}
+          onCopy={() => copyText(msgText, () => showToast("메시지를 복사했어요"))}
         />
       )}
       {durationEditorOpen && (
@@ -954,8 +954,8 @@ function RecommendationCarousel({
                   <CloseIcon />
                 </button>
                 <div className="recommendation-help-copy">
-                  필참자가 있으면 모두 가능한 시간을 먼저 보고, 필참 가능 인원, 전체 가능 인원, 선호 표시가 많은 순으로 추천해요.
-                  같은 날짜에서는 시간이 겹치는 후보를 제외합니다.
+                  필수 참석자가 모두 가능한 시간을 먼저 보여드리고, 가능한 사람이 많은 순으로 추천해요.
+                  같은 날짜에서 시간이 겹치는 후보는 빼고 보여드려요.
                 </div>
               </div>
             )}
@@ -1061,8 +1061,8 @@ function RecommendationCarousel({
           style={{ ...metaText, padding: "2px 0 0", textWrap: "pretty" }}
         >
           {requiredCount > 0
-            ? "필수 참석자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요."
-            : "추천할 수 있는 연속 시간이 없습니다. 참석자 응답을 확인해 주세요."}
+            ? "필수 참석자가 모두 가능한 연속 시간이 없어요. 필수 참석자 설정을 바꿔 보세요."
+            : "추천할 수 있는 연속 시간이 없어요. 참석자 응답을 확인해 주세요."}
         </div>
       )}
     </section>
@@ -1092,7 +1092,7 @@ function durationHourOptions(poll: Pick<PollMeta, "startHour" | "endHour">): num
 function durationValidationMessage(poll: Pick<PollMeta, "startHour" | "endHour">, duration: number): string {
   if (duration <= 0) return "소요 시간을 선택해 주세요";
   if (duration % SLOT_MINUTES !== 0) return `${SLOT_MINUTES}분 단위로 선택해 주세요`;
-  if (duration > maxDurationMinutes(poll)) return "소요 시간이 조사 시간대보다 길어요";
+  if (duration > maxDurationMinutes(poll)) return "소요 시간이 투표 시간대보다 길어요";
   return "";
 }
 
@@ -1280,7 +1280,7 @@ function ConfirmationMessageModal({
           }}
         />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-          <PrimaryButton onClick={onCopy}>메시지 + 링크 복사</PrimaryButton>
+          <PrimaryButton onClick={onCopy}>메시지와 링크 복사</PrimaryButton>
         </div>
       </div>
     </div>
@@ -1404,7 +1404,7 @@ function MeetingDurationEditorModal({
             <div style={{ ...captionText, color: "var(--color-danger)" }}>{validationMessage}</div>
           ) : (
             <div style={{ ...captionText }}>
-              저장하면 추천 시간이 새 기준으로 다시 계산됩니다.
+              저장하면 추천 시간을 새 기준으로 다시 계산해요.
             </div>
           )}
         </div>
@@ -1526,7 +1526,7 @@ function ResponseEditorModal({
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
           <div>
             <div id="response-editor-title" style={sectionTitle}>
-              응답자 수정
+              응답 관리
             </div>
             <div style={{ ...supportingText, marginTop: 4, ...tabularNumberStyle }}>
               {participants.length}명 응답
@@ -1626,7 +1626,7 @@ function ResponseEditorModal({
               e.currentTarget.style.background = deleteDisabled ? "rgba(0, 0, 0, 0.08)" : "#d92d20";
             }}
           >
-            {deleting ? "삭제 중" : selectedCount ? `${selectedCount}개 삭제` : "삭제"}
+            {deleting ? "삭제 중" : selectedCount ? `${selectedCount}명 삭제` : "삭제"}
           </button>
         </div>
       </div>

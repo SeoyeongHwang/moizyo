@@ -49,7 +49,7 @@ export function JoinPage() {
       // Names aren't unique, so this covers both "new name" and "동명이인 with a different password."
       navigate(`/vote/${id}/respond`, { state: { name: trimmed, password, mode: "create" } });
     } catch {
-      setError("확인 중 문제가 발생했습니다. 다시 시도해 주세요.");
+      setError("확인 중 문제가 생겼어요. 다시 시도해 주세요.");
       setChecking(false);
     }
   }
@@ -57,7 +57,7 @@ export function JoinPage() {
   if (notFound) {
     return (
       <div style={{ ...pagePadding, padding: "80px 20px", textAlign: "center" }}>
-        <div style={sectionTitle}>투표를 찾을 수 없습니다</div>
+        <div style={sectionTitle}>투표를 찾을 수 없어요</div>
       </div>
     );
   }
@@ -82,7 +82,7 @@ export function JoinPage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: controlActionGap, width: "100%" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-              <label style={fieldLabel}>게스트로 응답하기</label>
+              <label style={fieldLabel}>누구인지 알려주세요</label>
               <input
                 value={name}
                 onChange={(e) => {
@@ -105,7 +105,7 @@ export function JoinPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onJoin();
                 }}
-                placeholder="4자리 이상 비밀번호 (응답 수정 시 필요해요)"
+                placeholder="4자 이상 비밀번호 (응답 수정 시 필요해요)"
                 style={{ ...textInput, padding: 9 }}
               />
               {error && <div style={{ ...captionText, color: "var(--color-danger)" }}>{error}</div>}
