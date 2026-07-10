@@ -10,6 +10,7 @@ import {
   candidates as computeCandidates,
   dateShort,
   dedupeResponseNames,
+  durationLabel,
   evaluateSlot,
   fmtMin,
   labelResponseEntries,
@@ -55,11 +56,18 @@ const heatmapMaxAlpha = 0.92;
 const heatmapContrastPower = 1.25;
 const recommendationHighlightColor = "rgba(31, 30, 28, 0.88)";
 const recommendationHighlightLabelBg = "rgba(31, 30, 28, 0.96)";
-const inactiveRecommendationHighlightColor = "#6a655f";
+const recommendationHighlightShadow = "0 0 0 4px rgba(31, 30, 28, 0.08), 0 6px 14px rgba(31, 30, 28, 0.12)";
+const inactiveRecommendationHighlightColor = "#7f7972";
 const inactiveRecommendationHighlightLabelBg = "#615d59";
 const recommendationUpdateMinMs = 500;
 const durationMinuteOptions = [0, 15, 30, 45];
 type DetailPerson = { name: string; status: "available" | "unavailable" | "neutral" };
+type RecommendationSnapshot = {
+  recommendations: Candidate[];
+  total: number;
+  requiredCount: number;
+  poll: PollMeta;
+};
 type RecommendationOverlay = {
   c: Candidate;
   i: number;
@@ -130,7 +138,7 @@ export function ResultsPage() {
   const [msgEdited, setMsgEdited] = useState(false);
   const [requiredOpen, setRequiredOpen] = useState(false);
   const [selectedRecommendationIdx, setSelectedRecommendationIdx] = useState<number | null>(null);
-  const [displayedRecs, setDisplayedRecs] = useState<Candidate[]>([]);
+  const [displayedRecommendationSnapshot, setDisplayedRecommendationSnapshot] = useState<RecommendationSnapshot | null>(null);
   const [recommendationsUpdating, setRecommendationsUpdating] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
   const [durationEditorOpen, setDurationEditorOpen] = useState(false);
@@ -141,19 +149,20 @@ export function ResultsPage() {
   const recommendationUpdateIdRef = useRef(0);
   const recommendationUpdateTimerRef = useRef<number | undefined>(undefined);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback(async () => {
     if (!id) return;
-    getResults(id)
-      .then(({ poll: p, responses: r }) => {
-        setPoll(p);
-        setResponseEntries(r);
-        setResponses(dedupeResponseNames(r));
-      })
-      .catch(() => setNotFound(true));
+    try {
+      const { poll: p, responses: r } = await getResults(id);
+      setPoll(p);
+      setResponseEntries(r);
+      setResponses(dedupeResponseNames(r));
+    } catch {
+      setNotFound(true);
+    }
   }, [id]);
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, [refetch]);
 
   const responseParticipants = useMemo(() => labelResponseEntries(responseEntries), [responseEntries]);
@@ -167,11 +176,28 @@ export function ResultsPage() {
     [poll, activeRequiredNames]
   );
   const total = participantNames.length;
+  const requiredCount = activeRequiredNames.length;
   const recs = useMemo<Candidate[]>(
     () => (pollForRecommendations ? computeCandidates(pollForRecommendations, responses) : []),
     [pollForRecommendations, responses]
   );
-  const visibleRecs = recommendationsUpdating ? displayedRecs : recs;
+  const currentRecommendationSnapshot = useMemo<RecommendationSnapshot | null>(
+    () =>
+      pollForRecommendations
+        ? {
+            recommendations: recs,
+            total,
+            requiredCount,
+            poll: pollForRecommendations,
+          }
+        : null,
+    [pollForRecommendations, recs, total, requiredCount]
+  );
+  const visibleRecommendationSnapshot =
+    recommendationsUpdating && displayedRecommendationSnapshot ? displayedRecommendationSnapshot : currentRecommendationSnapshot;
+  const visibleRecs = visibleRecommendationSnapshot?.recommendations ?? [];
+  const visibleTotal = visibleRecommendationSnapshot?.total ?? total;
+  const visibleRequiredCount = visibleRecommendationSnapshot?.requiredCount ?? requiredCount;
 
   const finalStats = useMemo(() => {
     if (!pollForRecommendations || !pollForRecommendations.final) return null;
@@ -246,38 +272,55 @@ export function ResultsPage() {
   const map = aggregate(responses);
   const names = participantNames;
   const req = activeRequiredNames;
-  const pollForResults = pollForRecommendations || poll;
-  const durationText = formatDuration(poll.dur);
+  const pollForResults = visibleRecommendationSnapshot?.poll ?? pollForRecommendations ?? poll;
+  const durationText = durationLabel(poll.dur);
 
-  async function toggleRequired(name: string) {
-    if (!id || !poll) return;
-    const next = req.includes(name) ? req.filter((n) => n !== name) : [...req, name];
+  function beginRecommendationUpdate(): { updateId: number; startedAt: number } {
     const updateId = recommendationUpdateIdRef.current + 1;
     recommendationUpdateIdRef.current = updateId;
     if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
 
-    const previousPoll = poll;
-    const startedAt = Date.now();
-    setDisplayedRecs(visibleRecs);
+    setDisplayedRecommendationSnapshot(visibleRecommendationSnapshot ?? currentRecommendationSnapshot);
     setRecommendationsUpdating(true);
-    setSelectedRecommendationIdx(null);
+    return { updateId, startedAt: Date.now() };
+  }
+
+  function finishRecommendationUpdate(updateId: number, startedAt: number) {
+    if (recommendationUpdateIdRef.current !== updateId) return;
+    if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
+    const remainingMs = Math.max(0, recommendationUpdateMinMs - (Date.now() - startedAt));
+    recommendationUpdateTimerRef.current = window.setTimeout(() => {
+      if (recommendationUpdateIdRef.current !== updateId) return;
+      setSelectedRecommendationIdx(0);
+      setRecommendationsUpdating(false);
+      setDisplayedRecommendationSnapshot(null);
+      recommendationUpdateTimerRef.current = undefined;
+    }, remainingMs);
+  }
+
+  function cancelRecommendationUpdate(updateId: number) {
+    if (recommendationUpdateIdRef.current !== updateId) return;
+    if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
+    setRecommendationsUpdating(false);
+    setDisplayedRecommendationSnapshot(null);
+    recommendationUpdateTimerRef.current = undefined;
+  }
+
+  async function toggleRequired(name: string) {
+    if (!id || !poll) return;
+    const next = req.includes(name) ? req.filter((n) => n !== name) : [...req, name];
+    const previousPoll = poll;
+    const { updateId, startedAt } = beginRecommendationUpdate();
     setPoll({ ...poll, required: next });
 
     try {
       const updated = await updatePoll(id, { required: next });
       setPoll(updated);
-      const remainingMs = Math.max(0, recommendationUpdateMinMs - (Date.now() - startedAt));
-      recommendationUpdateTimerRef.current = window.setTimeout(() => {
-        if (recommendationUpdateIdRef.current !== updateId) return;
-        setSelectedRecommendationIdx(0);
-        setRecommendationsUpdating(false);
-        recommendationUpdateTimerRef.current = undefined;
-      }, remainingMs);
+      finishRecommendationUpdate(updateId, startedAt);
     } catch {
       if (recommendationUpdateIdRef.current === updateId) {
         setPoll(previousPoll);
-        setRecommendationsUpdating(false);
-        recommendationUpdateTimerRef.current = undefined;
+        cancelRecommendationUpdate(updateId);
         showToast("필수 참석자 변경에 실패했습니다");
       }
     }
@@ -299,15 +342,17 @@ export function ResultsPage() {
 
   async function saveMeetingDuration(duration: number) {
     if (!id || !poll || savingDuration) return;
+    const { updateId, startedAt } = beginRecommendationUpdate();
     setSavingDuration(true);
     try {
       const updated = await updatePoll(id, { dur: duration });
       setPoll(updated);
       setMsgEdited(false);
-      setSelectedRecommendationIdx(null);
       setDurationEditorOpen(false);
       showToast("예상 소요 시간을 수정했습니다");
+      finishRecommendationUpdate(updateId, startedAt);
     } catch {
+      cancelRecommendationUpdate(updateId);
       showToast("예상 소요 시간 수정에 실패했습니다");
     } finally {
       setSavingDuration(false);
@@ -323,6 +368,7 @@ export function ResultsPage() {
   async function deleteSelectedResponses() {
     if (!id || deletingResponses || selectedResponseIds.length === 0) return;
 
+    const { updateId, startedAt } = beginRecommendationUpdate();
     setDeletingResponses(true);
     let deletedCount = 0;
     try {
@@ -342,7 +388,8 @@ export function ResultsPage() {
       }
     } finally {
       setDeletingResponses(false);
-      refetch();
+      await refetch();
+      finishRecommendationUpdate(updateId, startedAt);
     }
   }
 
@@ -350,7 +397,6 @@ export function ResultsPage() {
   const de = dk ? map[dk] || { best: [], ok: [] } : null;
   const detailTitle = dk ? detailSlotTitle(dk) : null;
   const detailPanelTime = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려 보세요";
-  const detailOkCount = de ? de.ok.length : null;
   const detailPeople: DetailPerson[] = names.map((name) => ({
     name,
     status: de ? (de.best.includes(name) || de.ok.includes(name) ? "available" : "unavailable") : "neutral",
@@ -397,7 +443,7 @@ export function ResultsPage() {
     const candidate = visibleRecs[idx];
     if (!candidate) return;
     if (idx !== finalIdx) await onPick(idx);
-    setMsgText(buildConfirmationMessage(candidate, pollForResults, total, visibleRecs));
+    setMsgText(buildConfirmationMessage(candidate, pollForResults, visibleTotal, visibleRecs));
     setMsgEdited(false);
     setSelectedRecommendationIdx(idx);
     setMessageModalOpen(true);
@@ -458,14 +504,14 @@ export function ResultsPage() {
           </div>
         </div>
 
-        {total > 0 ? (
+        {visibleTotal > 0 ? (
           <>
           <div style={{ ...card, minWidth: 0, padding: 0, marginBottom: 20 }}>
             <RecommendationCarousel
               recommendations={visibleRecs}
               activeIdx={activeRecommendationIdx}
-              total={total}
-              requiredCount={req.length}
+              total={visibleTotal}
+              requiredCount={visibleRequiredCount}
               updating={recommendationsUpdating}
               onSelect={selectRecommendation}
               onShare={onShareRecommendation}
@@ -562,6 +608,10 @@ export function ResultsPage() {
                                   borderRadius: 9,
                                   boxSizing: "border-box",
                                   background: active ? "rgba(31, 30, 28, 0.04)" : "transparent",
+                                  boxShadow: active ? recommendationHighlightShadow : "none",
+                                  transitionProperty: "box-shadow, background",
+                                  transitionDuration: "180ms",
+                                  transitionTimingFunction: "ease-out",
                                 }}
                               />
                             </div>
@@ -706,25 +756,11 @@ export function ResultsPage() {
                   </button>
                 </div>
                 <NameChips people={detailPeople} />
-                <div
-                  aria-hidden={!detailOkCount}
-                  style={{
-                    ...captionText,
-                    color: "var(--time-detail-warn-text)",
-                    background: "var(--time-detail-warn-bg)",
-                    borderRadius: 8,
-                    padding: "8px 10px",
-                    visibility: detailOkCount ? "visible" : "hidden",
-                    ...tabularNumberStyle,
-                  }}
-                >
-                  {detailOkCount ?? 1}명에게는 이 시간이 부담스러울 수 있어요
-                </div>
               </div>
 
               <div style={accordionCard}>
                 <AccordionHeader
-                  title="필수 참석자 지정"
+                  title="필수 참석자"
                   summary={req.length ? `${req.length}명` : ""}
                   summaryPlacement="inline"
                   open={requiredOpen}
@@ -824,7 +860,9 @@ function RecommendationCarousel({
   onShare: (idx: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const helpRef = useRef<HTMLDivElement | null>(null);
   const [edges, setEdges] = useState({ left: false, right: false });
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current;
@@ -870,11 +908,58 @@ function RecommendationCarousel({
     };
   }, [recommendations.length, updateEdges]);
 
+  useEffect(() => {
+    if (!helpOpen) return;
+
+    function onPointerDown(e: PointerEvent) {
+      if (!helpRef.current?.contains(e.target as Node)) setHelpOpen(false);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setHelpOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [helpOpen]);
+
   return (
     <section className="recommendation-panel-content" aria-busy={updating}>
       <div className="recommendation-carousel-heading">
-        <div style={{ minWidth: 0 }}>
+        <div className="recommendation-heading-title-row">
           <div style={{ ...cardTitle, color: "var(--color-ink)" }}>추천 시간</div>
+          <div ref={helpRef} className="recommendation-help">
+            <button
+              type="button"
+              className="recommendation-help-button"
+              aria-label="추천 기준 보기"
+              aria-expanded={helpOpen}
+              aria-controls="recommendation-help-tooltip"
+              onClick={() => setHelpOpen((open) => !open)}
+            >
+              <QuestionMarkIcon />
+            </button>
+            {helpOpen && (
+              <div id="recommendation-help-tooltip" className="recommendation-help-tooltip" role="tooltip">
+                <button
+                  type="button"
+                  className="recommendation-help-close"
+                  aria-label="추천 기준 도움말 닫기"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  <CloseIcon />
+                </button>
+                <div className="recommendation-help-copy">
+                  필참자가 있으면 모두 가능한 시간을 먼저 보고, 필참 가능 인원, 전체 가능 인원, 선호 표시가 많은 순으로 추천해요.
+                  같은 날짜에서는 시간이 겹치는 후보를 제외합니다.
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -970,7 +1055,11 @@ function RecommendationCarousel({
           </div>
         </div>
       ) : (
-        <div className="recommendation-empty" style={{ ...metaText, padding: "2px 0 0", textWrap: "pretty" }}>
+        <div
+          className="recommendation-empty"
+          data-updating={updating ? "true" : "false"}
+          style={{ ...metaText, padding: "2px 0 0", textWrap: "pretty" }}
+        >
           {requiredCount > 0
             ? "필수 참석자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요."
             : "추천할 수 있는 연속 시간이 없습니다. 참석자 응답을 확인해 주세요."}
@@ -982,14 +1071,6 @@ function RecommendationCarousel({
 
 function rankLabel(index: number): string {
   return `${index + 1}순위`;
-}
-
-function formatDuration(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours > 0 && mins > 0) return `${hours}시간 ${mins}분`;
-  if (hours > 0) return `${hours}시간`;
-  return `${mins}분`;
 }
 
 function durationParts(minutes: number): { hours: number; minutes: number } {
@@ -1078,15 +1159,11 @@ function AccordionHeader({
             style={
               summaryPlacement === "inline"
                 ? {
-                    ...captionText,
+                    ...cardTitle,
                     display: "inline-flex",
-                    alignItems: "center",
-                    minHeight: 24,
-                    borderRadius: 9999,
-                    background: "var(--color-canvas-soft)",
-                    color: "var(--color-ink-muted)",
-                    padding: "2px 8px",
-                    border: "1px solid var(--color-hairline)",
+                    alignItems: "baseline",
+                    minHeight: 0,
+                    color: "var(--color-best)",
                     ...tabularNumberStyle,
                   }
                 : { ...captionText, ...tabularNumberStyle }
@@ -1591,19 +1668,19 @@ function RecommendationCriteria({
   requiredCount: number;
   highlight: string | null;
 }) {
-  const items: Array<{ label: string; checked: boolean }> = [];
+  const items: Array<{ label: string; tone: "success" | "warning" }> = [];
 
   if (requiredCount > 0) {
     items.push({
       label: candidate.reqOk ? "필수 참석자 모두 가능" : "필수 참석자 일부 불가",
-      checked: candidate.reqOk,
+      tone: candidate.reqOk ? "success" : "warning",
     });
   }
   items.push({
     label: total > 0 && candidate.avail.length === total ? "모든 참석자 가능" : `${total}명 중 ${candidate.avail.length}명 가능`,
-    checked: candidate.avail.length > 0,
+    tone: total > 0 && candidate.avail.length === total ? "success" : "warning",
   });
-  if (highlight) items.push({ label: highlight, checked: true });
+  if (highlight) items.push({ label: highlight, tone: "success" });
 
   return (
     <ul style={{ display: "flex", flexDirection: "column", gap: 4, listStyle: "none", padding: 0, margin: "4px 0 0" }}>
@@ -1615,7 +1692,7 @@ function RecommendationCriteria({
             alignItems: "flex-start",
             gap: 6,
             ...metaText,
-            color: item.checked ? "var(--color-ink-muted)" : "var(--color-ink-faint)",
+            color: "var(--color-ink-muted)",
             ...tabularNumberStyle,
           }}
         >
@@ -1629,10 +1706,10 @@ function RecommendationCriteria({
               justifyContent: "center",
               flex: "none",
               marginTop: 1,
-              color: item.checked ? "var(--color-best)" : "var(--color-ink-faint)",
+              color: item.tone === "success" ? "var(--color-best)" : "var(--color-danger)",
             }}
           >
-            {item.checked ? <CheckIcon /> : <span style={{ width: 4, height: 4, borderRadius: 9999, background: "currentColor" }} />}
+            {item.tone === "success" ? <CheckIcon /> : <WarningIcon />}
           </span>
           <span>{item.label}</span>
         </li>
@@ -1645,6 +1722,38 @@ function CheckIcon({ size = 16, strokeWidth = 2 }: { size?: number; strokeWidth?
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
       <path d="M13.3 4.4 6.6 11.1 2.9 7.4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function WarningIcon({ size = 16, strokeWidth = 2 }: { size?: number; strokeWidth?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path d="M8 3.2v6.4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <path d="M8 12.7h.01" stroke="currentColor" strokeWidth={strokeWidth + 0.2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function QuestionMarkIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path
+        d="M5.8 5.5a2.3 2.3 0 0 1 4.5.5c0 1.7-1.8 1.9-1.8 3.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8.5 12.1h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -1677,6 +1786,20 @@ function NameChips({ people }: { people: DetailPerson[] }) {
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
       {people.map(({ name, status }) => {
         const available = status === "available";
+        const unavailable = status === "unavailable";
+        let background = "var(--time-detail-chip-bg)";
+        let color = "var(--time-detail-chip-text)";
+        let border = "1px solid var(--time-detail-chip-border)";
+
+        if (available) {
+          background = "var(--time-detail-chip-available-bg)";
+          color = "var(--time-detail-chip-available-text)";
+          border = "1px solid var(--time-detail-chip-available-border)";
+        } else if (unavailable) {
+          background = "var(--time-detail-chip-unavailable-bg)";
+          color = "var(--time-detail-chip-unavailable-text)";
+          border = "1px solid var(--time-detail-chip-unavailable-border)";
+        }
 
         return (
           <span
@@ -1687,9 +1810,9 @@ function NameChips({ people }: { people: DetailPerson[] }) {
               alignItems: "center",
               minHeight: 28,
               borderRadius: 9999,
-              background: available ? "var(--time-detail-chip-available-bg)" : "var(--time-detail-chip-bg)",
-              color: available ? "var(--time-detail-chip-available-text)" : "var(--time-detail-chip-text)",
-              border: available ? "1px solid var(--time-detail-chip-available-border)" : "1px solid var(--time-detail-chip-border)",
+              background,
+              color,
+              border,
               padding: "3px 10px",
               fontSize: 14,
               fontWeight: 600,

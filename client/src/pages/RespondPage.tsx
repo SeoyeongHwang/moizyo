@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getPoll, submitResponse, updateResponse } from "../lib/api";
 import type { Category, Marks, PollMeta } from "../lib/scheduling";
-import { dateShort, pollTitle, slots } from "../lib/scheduling";
+import { dateShort, durationLabel, pollTitle, slots } from "../lib/scheduling";
 import {
   timetableAxisLabelStyle,
   timetableAxisText,
@@ -88,6 +88,7 @@ export function RespondPage() {
   const [cat, setCat] = useState<Category>("best");
   const [marks, setMarks] = useState<Marks>(state?.marks ?? {});
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [preferenceTooltipDismissed, setPreferenceTooltipDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const catRef = useRef(cat);
@@ -131,10 +132,22 @@ export function RespondPage() {
 
   const sl = slots(poll);
   const markedCount = Object.keys(marks).length;
-  const durationLabel = poll.dur % 60 === 0 ? `${poll.dur / 60}시간` : `${poll.dur}분`;
+  const durationText = durationLabel(poll.dur);
   const timetableGridColumns = buildTimetableGridColumns(poll.dates.length);
   const timetableWidth = timetableContentWidth(poll.dates.length);
   const mutedOtherCategoryBackgroundSize = `${poll.dates.length * 100}% ${sl.length * timetableSlotHeight}px, auto`;
+  const isPreferenceStep = cat === "ok";
+  const showPreferenceTooltip = isPreferenceStep && !preferenceTooltipDismissed;
+  const primaryActionLabel = isPreferenceStep ? "응답 제출하기" : "다음으로";
+  const helperText = isPreferenceStep ? (
+    <>
+      드래그해서 <b>가능하지만 덜 선호하는 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
+    </>
+  ) : (
+    <>
+      드래그해서 <b>가능한 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
+    </>
+  );
 
   function paintRectangle(endKey: string, drag: DragState) {
     if (!poll) return;
@@ -219,6 +232,16 @@ export function RespondPage() {
     }
   }
 
+  function onPrimaryAction() {
+    if (!markedCount || submitting) return;
+    if (!isPreferenceStep) {
+      setCat("ok");
+      setHoveredKey(null);
+      return;
+    }
+    void onSubmit();
+  }
+
   const segBase = {
     border: "none",
     padding: "8px 16px",
@@ -236,17 +259,15 @@ export function RespondPage() {
         <div style={{ width: "100%", maxWidth: 820 }}>
           <div style={{ marginBottom: 10 }}>
             <div style={pageTitle}>
-              <span>{pollTitle(poll)}</span>{" "}<span>{durationLabel}</span>
+              <span>{pollTitle(poll)}</span>{" "}<span>{durationText}</span>
               <span>,<br></br>언제가 좋으세요?</span>
             </div>
           </div>
-          <div style={{ ...supportingText, marginBottom: 24 }}>
-            드래그해서 가능한 시간을 표시해 주세요.<br></br>표시하지 않은 시간은 자동으로 <b>불가능</b>으로 처리됩니다.
-          </div>
+          <div style={{ ...supportingText, marginBottom: 24 }}>{helperText}</div>
 
           <div style={{ ...card, padding: 0 }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div style={{ position: "relative", flex: "none" }}>
+              <div className="respond-preference-anchor">
                 <div style={{ display: "flex", border: "1px solid var(--color-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
                   <button
                     type="button"
@@ -258,11 +279,11 @@ export function RespondPage() {
                       borderRight: "1px solid var(--color-hairline)",
                     }}
                   >
-                    가장 좋은 시간
+                    가능한 시간
                   </button>
                   <button
                     type="button"
-                    aria-describedby={cat === "ok" ? preferenceTooltipId : undefined}
+                    aria-describedby={showPreferenceTooltip ? preferenceTooltipId : undefined}
                     onClick={() => setCat("ok")}
                     style={{
                       ...segBase,
@@ -270,10 +291,12 @@ export function RespondPage() {
                       color: cat === "ok" ? "var(--color-ok-text)" : "var(--color-ink-muted)",
                     }}
                   >
-                    가능하지만 비선호
+                    가능하지만 비선호하는 시간
                   </button>
                 </div>
-                {cat === "ok" ? <PreferenceTooltip id={preferenceTooltipId} name={name} /> : null}
+                {showPreferenceTooltip ? (
+                  <PreferenceTooltip id={preferenceTooltipId} name={name} onDismiss={() => setPreferenceTooltipDismissed(true)} />
+                ) : null}
               </div>
               <div style={{ display: "flex", gap: 14, ...captionText, alignItems: "center" }}>
                 <Legend color="var(--color-best)" label="선호" />
@@ -377,8 +400,8 @@ export function RespondPage() {
           <div style={{ flex: "1 1 180px", ...metaText }}>
             {markedCount ? `` : "아직 선택된 시간이 없습니다"}
           </div>
-          <PrimaryButton onClick={onSubmit} disabled={!markedCount || submitting}>
-            응답 제출하기
+          <PrimaryButton onClick={onPrimaryAction} disabled={!markedCount || submitting}>
+            {primaryActionLabel}
           </PrimaryButton>
         </div>
       </div>
@@ -395,46 +418,26 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function PreferenceTooltip({ id, name }: { id: string; name: string }) {
+function PreferenceTooltip({ id, name, onDismiss }: { id: string; name: string; onDismiss: () => void }) {
   return (
     <div
       id={id}
-      role="tooltip"
+      role="note"
       aria-live="polite"
-      style={{
-        position: "absolute",
-        bottom: "calc(100% + 10px)",
-        left: 0,
-        zIndex: 30,
-        width: "max-content",
-        maxWidth: "min(320px, calc(100vw - 40px))",
-        padding: "10px 12px",
-        borderRadius: "var(--radius-md)",
-        background: "rgba(31, 30, 28, 0.96)",
-        color: "#ffffff",
-        boxShadow: "0 14px 34px rgba(0, 0, 0, 0.22), 0 3px 10px rgba(0, 0, 0, 0.18)",
-        fontSize: 13,
-        fontWeight: 600,
-        lineHeight: 1.45,
-        letterSpacing: 0,
-        textWrap: "pretty",
-        pointerEvents: "none",
-      }}
+      className="respond-preference-tooltip"
     >
       <div
         aria-hidden="true"
-        style={{
-          position: "absolute",
-          bottom: -5,
-          left: "72%",
-          width: 10,
-          height: 10,
-          borderBottomRightRadius: 2,
-          background: "rgba(31, 30, 28, 0.96)",
-          transform: "translateX(-50%) rotate(45deg)",
-        }}
+        className="respond-preference-tooltip__arrow"
       />
-      {name}님의 표시 여부는 공개되지 않아요.<br></br>이 시간은 가능한 한 피해서 추천해요.
+      <div className="respond-preference-tooltip__copy">
+        {name}님의 표시 여부는 공개되지 않아요.<br></br>이 시간은 가능한 한 피해서 추천해요.
+      </div>
+      <button type="button" className="respond-preference-tooltip__button" aria-label="안내 닫기" onClick={onDismiss}>
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="respond-preference-tooltip__button-icon">
+          <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </button>
     </div>
   );
 }

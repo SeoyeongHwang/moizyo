@@ -1,4 +1,4 @@
-// Ported from the "언제볼까 MVP" design prototype's scheduling logic.
+// Ported from the "moizyo MVP" design prototype's scheduling logic.
 
 export const SLOT_MINUTES = 15;
 
@@ -129,7 +129,7 @@ function dateSelectionLabel(dateKeys: string[]): string {
   return consecutiveDateRangeLabel(dateKeys) ?? `${dateLabel(dateKeys[0])} 외 ${dateKeys.length - 1}일`;
 }
 
-function durationLabel(minutes: number): string {
+export function durationLabel(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   if (hours > 0 && mins > 0) return `${hours}시간 ${mins}분`;
@@ -164,7 +164,7 @@ export function pollTitle(poll: { purpose: string }): string {
 }
 
 export function pollRangeLine(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
-  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 ${poll.dur}분 예상`;
+  return `${dateSelectionScopeLabel(poll.dates)} 중,\n${fmtMin(poll.startHour * 60)}부터 ${fmtMin(poll.endHour * 60)} 사이 ${durationLabel(poll.dur)} 예상`;
 }
 
 export function pollParticipationGuide(poll: { dates: string[]; startHour: number; endHour: number; dur: number }): string {
@@ -322,7 +322,7 @@ export function recommendationHighlight(
   }
   const minBurdened = Math.min(...otherCandidates.map((c) => c.okAny.length));
   if (otherCandidates.length > 1 && burdened === minBurdened) {
-    return "많은 참석자가 가장 부담 덜 한 시간";
+    return "참석 가능한 모두의 선호를 최대한 반영";
   }
   return null;
 }
@@ -339,7 +339,7 @@ export function buildConfirmationMessage(
   lines.push("");
   lines.push(`일시: ${dateLabel(candidate.date)} ${fmtMin(candidate.startMin)} ~ ${fmtMin(candidate.endMin)}`);
   lines.push("");
-  lines.push("이렇게 정했어요");
+  lines.push("일정 조율 결과");
   if (req.length) {
     lines.push(candidate.reqOk ? "- 필수 참석자 모두 가능" : "- 필수 참석자 일부 불가");
   }

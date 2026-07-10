@@ -85,6 +85,104 @@ a:hover {
   flex-direction: column;
 }
 
+.respond-preference-anchor {
+  position: relative;
+  flex: none;
+}
+
+.respond-preference-tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 30;
+  width: min(308px, calc(100vw - 40px));
+  padding: 11px 42px 11px 13px;
+  border-radius: var(--radius-md);
+  background: rgba(31, 30, 28, 0.96);
+  color: #ffffff;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.48;
+  letter-spacing: 0;
+  text-wrap: pretty;
+  pointer-events: auto;
+}
+
+.respond-preference-tooltip__arrow {
+  position: absolute;
+  bottom: -5px;
+  left: 72%;
+  width: 10px;
+  height: 10px;
+  border-bottom-right-radius: 2px;
+  background: rgba(31, 30, 28, 0.96);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.respond-preference-tooltip__copy {
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.respond-preference-tooltip__button {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  transition-property: color, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.respond-preference-tooltip__button:hover {
+  color: #ffffff;
+}
+
+.respond-preference-tooltip__button:active {
+  transform: scale(0.94);
+}
+
+.respond-preference-tooltip__button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.56);
+  outline-offset: 2px;
+}
+
+.respond-preference-tooltip__button-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+@media (min-width: 860px) {
+  .respond-preference-tooltip {
+    top: 50%;
+    bottom: auto;
+    left: calc(100% + 10px);
+    transform: translateY(-50%);
+  }
+
+  .respond-preference-tooltip__arrow {
+    top: 50%;
+    bottom: auto;
+    left: -5px;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 2px;
+    transform: translateY(-50%) rotate(45deg);
+  }
+}
+
 .accordion-panel {
   display: grid;
   grid-template-rows: 0fr;
@@ -150,8 +248,11 @@ a:hover {
   --time-detail-chip-border: var(--color-hairline);
   --time-detail-chip-text: var(--color-ink-muted);
   --time-detail-chip-available-bg: rgba(var(--color-best-rgb), 0.12);
-  --time-detail-chip-available-border: rgba(var(--color-best-rgb), 0.28);
+  --time-detail-chip-available-border: rgba(var(--color-best-rgb), 0.52);
   --time-detail-chip-available-text: var(--color-best-text);
+  --time-detail-chip-unavailable-bg: rgba(217, 45, 32, 0.12);
+  --time-detail-chip-unavailable-border: rgba(217, 45, 32, 0.28);
+  --time-detail-chip-unavailable-text: #b21e17;
   --time-detail-warn-bg: var(--color-warn-bg);
   --time-detail-warn-border: rgba(221, 91, 0, 0.12);
   --time-detail-warn-text: var(--color-warn-text);
@@ -175,6 +276,119 @@ a:hover {
 
 .recommendation-carousel-heading {
   min-width: 0;
+}
+
+.recommendation-heading-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.recommendation-help {
+  position: relative;
+  flex: none;
+}
+
+.recommendation-help-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(52, 50, 48, 0.1);
+  border-radius: var(--radius-full);
+  background: rgba(52, 50, 48, 0.045);
+  color: rgba(52, 50, 48, 0.62);
+  cursor: pointer;
+  transition-property: background-color, border-color, color, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-help-button:hover,
+.recommendation-help-button[aria-expanded="true"] {
+  border-color: rgba(52, 50, 48, 0.16);
+  background: rgba(52, 50, 48, 0.08);
+  color: rgba(31, 30, 28, 0.84);
+}
+
+.recommendation-help-button:active {
+  transform: scale(0.96);
+}
+
+.recommendation-help-button:focus-visible {
+  outline: 2px solid rgba(var(--color-best-rgb), 0.45);
+  outline-offset: 2px;
+}
+
+.recommendation-help-tooltip {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  z-index: 20;
+  width: min(308px, calc(100vw - 148px));
+  padding: 11px 42px 11px 13px;
+  border-radius: var(--radius-md);
+  background: rgba(31, 30, 28, 0.96);
+  color: #ffffff;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), 0 3px 10px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.48;
+  letter-spacing: 0;
+  text-wrap: pretty;
+  transform: translateY(-50%);
+}
+
+.recommendation-help-copy {
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+.recommendation-help-close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  transition-property: color, transform;
+  transition-duration: 140ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-help-close:hover {
+  color: #ffffff;
+}
+
+.recommendation-help-close:active {
+  transform: scale(0.94);
+}
+
+.recommendation-help-close:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.56);
+  outline-offset: 2px;
+}
+
+.recommendation-help-tooltip::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-bottom-left-radius: 2px;
+  background: rgba(31, 30, 28, 0.96);
+  transform: translateY(-50%) rotate(45deg);
 }
 
 .recommendation-carousel-frame {
@@ -262,6 +476,14 @@ a:hover {
 
 .recommendation-empty {
   min-width: 0;
+  transition-property: opacity, filter;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
+}
+
+.recommendation-empty[data-updating="true"] {
+  opacity: 0.38;
+  filter: saturate(0.52) brightness(0.96);
 }
 
 .recommendation-carousel[data-updating="true"] {
@@ -354,26 +576,27 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.055);
-  color: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(52, 50, 48, 0.08);
+  border-radius: var(--radius-full);
+  background: rgba(52, 50, 48, 0.045);
+  color: rgba(52, 50, 48, 0.72);
   cursor: pointer;
-  transition-property: background-color, color, transform;
+  transition-property: background-color, border-color, color, transform;
   transition-duration: 140ms;
   transition-timing-function: ease-out;
 }
 
 .recommendation-card-share:hover {
-  background: rgba(0, 0, 0, 0.72);
-  color: #ffffff;
+  border-color: rgba(52, 50, 48, 0.14);
+  background: rgba(52, 50, 48, 0.08);
+  color: var(--color-ink);
 }
 
 .recommendation-card-share:active {
-  transform: scale(0.92);
+  transform: scale(0.96);
 }
 
 .recommendation-card-share:focus-visible {
@@ -387,8 +610,9 @@ a:hover {
 }
 
 .recommendation-card-share:disabled:hover {
-  background: rgba(0, 0, 0, 0.055);
-  color: rgba(0, 0, 0, 0.68);
+  border-color: rgba(52, 50, 48, 0.08);
+  background: rgba(52, 50, 48, 0.045);
+  color: rgba(52, 50, 48, 0.72);
 }
 
 .confirmation-modal-overlay {
@@ -500,6 +724,10 @@ a:hover {
   .recommendation-carousel,
   .recommendation-carousel-card,
   .recommendation-carousel-card-inner,
+  .recommendation-card-share,
+  .recommendation-help-button,
+  .recommendation-help-close,
+  .respond-preference-tooltip__button,
   .confirmation-modal-overlay,
   .confirmation-modal-dialog,
   .app-toast {
@@ -514,7 +742,11 @@ a:hover {
   }
 
   .recommendation-carousel-card:hover .recommendation-carousel-card-inner,
-  .recommendation-carousel-card:active .recommendation-carousel-card-inner {
+  .recommendation-carousel-card:active .recommendation-carousel-card-inner,
+  .recommendation-card-share:active,
+  .recommendation-help-button:active,
+  .recommendation-help-close:active,
+  .respond-preference-tooltip__button:active {
     transform: none;
   }
 }

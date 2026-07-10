@@ -18,25 +18,7 @@ export function NavBar() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", rowGap: 6 }}>
-        <div
-          style={{
-            width: 26,
-            height: 26,
-            borderRadius: 6,
-            background: "var(--color-primary)",
-            color: "#fff",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            fontSize: 15,
-            lineHeight: 1,
-            letterSpacing: 0,
-          }}
-        >
-          언
-        </div>
-        <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.35, letterSpacing: 0, whiteSpace: "nowrap" }}>moiltime</div>
+        <div style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.35, letterSpacing: 0, whiteSpace: "nowrap" }}>moizyo</div>
       </div>
       <button
         onClick={() => navigate("/")}
