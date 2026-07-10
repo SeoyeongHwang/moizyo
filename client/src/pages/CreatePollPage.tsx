@@ -134,7 +134,7 @@ export function CreatePollPage() {
         endHour: fEnd,
         dur: fDur,
       });
-      navigate(`/vote/${poll.id}`);
+      navigate(`/vote/${poll.id}`, { state: { created: true } });
     } catch {
       setSubmitting(false);
     }
@@ -420,8 +420,7 @@ export function CreatePollPage() {
 
           <div
             style={{
-              borderTop: "1px solid var(--color-hairline)",
-              paddingTop: 20,
+              paddingTop: 4,
             }}
           >
             <PrimaryButton onClick={onCreate} disabled={!canCreate || submitting} style={{ width: "100%", minHeight: 48 }}>

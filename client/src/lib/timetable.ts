@@ -2,10 +2,18 @@ import type { CSSProperties } from "react";
 import { timeAxisLabel } from "./scheduling";
 
 export const timetableLabelWidth = 66;
-export const timetableSlotHeight = 34;
-const timetableDateMinWidth = 104;
+export const timetableSlotHeight = 17;
+const timetableDateMinWidth = 82;
 
 const tabularNumberStyle = { fontVariantNumeric: "tabular-nums" as const };
+
+export const timetableLayerZIndex = {
+  cellHover: 1,
+  recommendationHighlight: 2,
+  activeRecommendationHighlight: 3,
+  recommendationLabel: 4,
+  scrollOverlay: 5,
+} as const;
 
 export function timetableGridColumns(dateCount: number): string {
   return `${timetableLabelWidth}px repeat(${dateCount}, minmax(0, 1fr))`;
@@ -48,10 +56,21 @@ export const timetableAxisLabelStyle: CSSProperties = {
   ...tabularNumberStyle,
 };
 
+export const timetableEndAxisLabelStyle: CSSProperties = {
+  ...timetableAxisLabelStyle,
+  height: 0,
+};
+
 export function timetableCellFrameStyle(minute: number): CSSProperties {
+  const onHour = minute % 60 === 0;
+  const onHalfHour = minute % 60 === 30;
   return {
     height: timetableSlotHeight,
     borderRight: "1px solid rgba(255,255,255,0.6)",
-    borderTop: minute % 60 === 0 ? "1px solid rgba(0,0,0,0.12)" : "1px dashed rgba(52,50,48,0.18)",
+    borderTop: onHour
+      ? "1px solid rgba(0,0,0,0.12)"
+      : onHalfHour
+      ? "1px dashed rgba(52,50,48,0.24)"
+      : "none",
   };
 }

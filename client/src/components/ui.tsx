@@ -48,7 +48,6 @@ export function SecondaryButton({ style, ...props }: BtnProps) {
         lineHeight: 1.35,
         letterSpacing: 0,
         cursor: "pointer",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         flex: "none",
         ...style,
       }}
@@ -65,7 +64,7 @@ export function UtilityButton({ style, ...props }: BtnProps) {
       style={{
         background: "#fff",
         border: "1px solid var(--color-hairline)",
-        borderRadius: "var(--radius-full)",
+        borderRadius: "var(--radius-md)",
         padding: "4px 14px",
         fontSize: 15,
         fontWeight: 500,

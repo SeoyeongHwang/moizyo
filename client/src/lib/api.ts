@@ -37,20 +37,44 @@ export function getPoll(id: string): Promise<PollMeta> {
   return request<PollMeta>(`/polls/${id}`);
 }
 
-export function checkNameExists(id: string, name: string): Promise<{ exists: boolean }> {
-  return request<{ exists: boolean }>(`/polls/${id}/responses/${encodeURIComponent(name)}/exists`);
+// A password mismatch is indistinguishable from "no such response yet" —
+// names aren't unique, so both cases just mean "create a new response."
+export type ResponseAccess = { status: "new" } | { status: "ok"; id: number; marks: Marks };
+
+export function checkResponseAccess(id: string, name: string, password: string): Promise<ResponseAccess> {
+  return request<ResponseAccess>(`/polls/${id}/responses/${encodeURIComponent(name)}/check`, {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
 }
 
-export function submitResponse(id: string, name: string, marks: Marks): Promise<{ ok: true }> {
+export function submitResponse(id: string, name: string, password: string, marks: Marks): Promise<{ ok: true }> {
   return request<{ ok: true }>(`/polls/${id}/responses`, {
     method: "POST",
-    body: JSON.stringify({ name, marks }),
+    body: JSON.stringify({ name, password, marks }),
   });
+}
+
+export function updateResponse(id: string, responseId: number, password: string, marks: Marks): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/polls/${id}/responses/${responseId}`, {
+    method: "PUT",
+    body: JSON.stringify({ password, marks }),
+  });
+}
+
+export function deleteResponse(id: string, responseId: number): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/polls/${id}/responses/${responseId}`, { method: "DELETE" });
+}
+
+export interface ResponseEntry {
+  id: number;
+  name: string;
+  marks: Marks;
 }
 
 export interface ResultsPayload {
   poll: PollMeta;
-  responses: Record<string, Marks>;
+  responses: ResponseEntry[];
 }
 
 export function getResults(id: string): Promise<ResultsPayload> {
@@ -59,7 +83,7 @@ export function getResults(id: string): Promise<ResultsPayload> {
 
 export function updatePoll(
   id: string,
-  patch: { required?: string[]; final?: FinalSlot | null }
+  patch: { required?: string[]; final?: FinalSlot | null; dur?: number }
 ): Promise<PollMeta> {
   return request<PollMeta>(`/polls/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }

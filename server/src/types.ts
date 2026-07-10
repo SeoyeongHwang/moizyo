@@ -31,6 +31,23 @@ export interface PollMeta {
 
 export type Marks = Record<string, "best" | "ok">;
 
+// Names aren't unique (동명이인 can share one), so results are returned as an
+// ordered list keyed by response id rather than an object keyed by name.
+export interface ResponseEntry {
+  id: number;
+  name: string;
+  marks: Marks;
+}
+
+export function sanitizeMarks(input: unknown): Marks | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const clean: Marks = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (v === "best" || v === "ok") clean[k] = v;
+  }
+  return clean;
+}
+
 export function toMeta(row: PollRow, responseCount: number): PollMeta {
   return {
     id: row.id,

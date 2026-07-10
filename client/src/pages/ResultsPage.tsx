@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getResults, seedDemo, updatePoll } from "../lib/api";
-import type { Candidate, Marks, PollMeta } from "../lib/scheduling";
+import { deleteResponse, getResults, updatePoll } from "../lib/api";
+import type { ResponseEntry } from "../lib/api";
+import type { Candidate, LabeledResponseEntry, Marks, PollMeta } from "../lib/scheduling";
 import {
   SLOT_MINUTES,
   aggregate,
   buildConfirmationMessage,
   candidates as computeCandidates,
   dateShort,
+  dedupeResponseNames,
+  durationLabel,
   evaluateSlot,
   fmtMin,
+  labelResponseEntries,
+  pollJoinLink,
   pollTitle,
+  recommendationHighlight,
   responseCountText,
   slots,
 } from "../lib/scheduling";
@@ -21,13 +27,15 @@ import {
   timetableCellFrameStyle,
   timetableContentWidth,
   timetableDateHeaderStyle,
+  timetableEndAxisLabelStyle,
   timetableGridColumns as buildTimetableGridColumns,
+  timetableLayerZIndex,
   timetableSlotHeight,
 } from "../lib/timetable";
 import { AccordionPanel } from "../components/AccordionPanel";
-import { TimetableScrollFrame } from "../components/TimetableScrollFrame";
+import { ScrollButton, TimetableScrollFrame } from "../components/TimetableScrollFrame";
 import { useToast } from "../components/Toast";
-import { PrimaryButton, UtilityButton } from "../components/ui";
+import { PrimaryButton, SecondaryButton } from "../components/ui";
 import {
   captionText,
   card,
@@ -42,16 +50,79 @@ import {
 
 const tabularNumberStyle = { fontVariantNumeric: "tabular-nums" as const };
 const requiredPanelId = "required-participants-panel";
-const accordionCard = { ...card, gap: 0 };
+const accordionCard = { ...card, gap: 0, padding: 0 };
 const heatmapMinAlpha = 0.08;
 const heatmapMaxAlpha = 0.92;
 const heatmapContrastPower = 1.25;
 const recommendationHighlightColor = "rgba(31, 30, 28, 0.88)";
 const recommendationHighlightLabelBg = "rgba(31, 30, 28, 0.96)";
-const inactiveRecommendationHighlightColor = "#6a655f";
+const recommendationHighlightShadow = "0 0 0 4px rgba(31, 30, 28, 0.08), 0 6px 14px rgba(31, 30, 28, 0.12)";
+const inactiveRecommendationHighlightColor = "#7f7972";
 const inactiveRecommendationHighlightLabelBg = "#615d59";
 const recommendationUpdateMinMs = 500;
-type DetailPerson = { name: string; status: "available" | "unavailable" };
+const durationMinuteOptions = [0, 15, 30, 45];
+type DetailPerson = { name: string; status: "available" | "unavailable" | "neutral" };
+type RecommendationSnapshot = {
+  recommendations: Candidate[];
+  total: number;
+  requiredCount: number;
+  poll: PollMeta;
+};
+type RecommendationOverlay = {
+  c: Candidate;
+  i: number;
+  dateIndex: number;
+  startIndex: number;
+  slotCount: number;
+  labelBelow: boolean;
+  active: boolean;
+  labelBg: string;
+};
+
+function placeRecommendationLabels(overlays: RecommendationOverlay[]): RecommendationOverlay[] {
+  const placed = overlays.map((overlay) => ({ ...overlay }));
+  const movedBelow = new Set<number>();
+
+  for (let pass = 0; pass < placed.length; pass += 1) {
+    const groups = new Map<string, number[]>();
+    let changed = false;
+
+    placed.forEach((overlay, index) => {
+      const anchorIndex = overlay.labelBelow ? overlay.startIndex + overlay.slotCount : overlay.startIndex;
+      const key = `${overlay.dateIndex}_${anchorIndex}`;
+      groups.set(key, [...(groups.get(key) || []), index]);
+    });
+
+    groups.forEach((indices) => {
+      if (indices.length < 2) return;
+
+      const endingAtBoundary = indices.filter((index) => placed[index].labelBelow);
+      const startingAtBoundary = indices.filter((index) => !placed[index].labelBelow);
+      if (endingAtBoundary.length === 0 || startingAtBoundary.length === 0) return;
+
+      startingAtBoundary.forEach((overlayIndex) => {
+        if (movedBelow.has(overlayIndex)) return;
+        placed[overlayIndex].labelBelow = true;
+        movedBelow.add(overlayIndex);
+        changed = true;
+      });
+    });
+
+    if (!changed) break;
+  }
+
+  return placed;
+}
+
+function activeRequiredParticipants(required: string[] | undefined, participantNames: string[]): string[] {
+  const participantSet = new Set(participantNames);
+  const seen = new Set<string>();
+  return (required || []).filter((name) => {
+    if (!participantSet.has(name) || seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+}
 
 export function ResultsPage() {
   const { id } = useParams<{ id: string }>();
@@ -60,53 +131,98 @@ export function ResultsPage() {
 
   const [poll, setPoll] = useState<PollMeta | null>(null);
   const [responses, setResponses] = useState<Record<string, Marks>>({});
+  const [responseEntries, setResponseEntries] = useState<ResponseEntry[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [msgText, setMsgText] = useState("");
   const [msgEdited, setMsgEdited] = useState(false);
   const [requiredOpen, setRequiredOpen] = useState(false);
   const [selectedRecommendationIdx, setSelectedRecommendationIdx] = useState<number | null>(null);
-  const [displayedRecs, setDisplayedRecs] = useState<Candidate[]>([]);
+  const [displayedRecommendationSnapshot, setDisplayedRecommendationSnapshot] = useState<RecommendationSnapshot | null>(null);
   const [recommendationsUpdating, setRecommendationsUpdating] = useState(false);
   const [messageModalOpen, setMessageModalOpen] = useState(false);
+  const [durationEditorOpen, setDurationEditorOpen] = useState(false);
+  const [savingDuration, setSavingDuration] = useState(false);
+  const [responseEditorOpen, setResponseEditorOpen] = useState(false);
+  const [selectedResponseIds, setSelectedResponseIds] = useState<number[]>([]);
+  const [deletingResponses, setDeletingResponses] = useState(false);
   const recommendationUpdateIdRef = useRef(0);
   const recommendationUpdateTimerRef = useRef<number | undefined>(undefined);
 
-  const refetch = useCallback(() => {
+  const refetch = useCallback(async () => {
     if (!id) return;
-    getResults(id)
-      .then(({ poll: p, responses: r }) => {
-        setPoll(p);
-        setResponses(r);
-      })
-      .catch(() => setNotFound(true));
+    try {
+      const { poll: p, responses: r } = await getResults(id);
+      setPoll(p);
+      setResponseEntries(r);
+      setResponses(dedupeResponseNames(r));
+    } catch {
+      setNotFound(true);
+    }
   }, [id]);
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, [refetch]);
 
-  const total = Object.keys(responses).length;
-  const recs = useMemo<Candidate[]>(() => (poll ? computeCandidates(poll, responses) : []), [poll, responses]);
-  const visibleRecs = recommendationsUpdating ? displayedRecs : recs;
+  const responseParticipants = useMemo(() => labelResponseEntries(responseEntries), [responseEntries]);
+  const participantNames = useMemo(() => Object.keys(responses), [responses]);
+  const activeRequiredNames = useMemo(
+    () => activeRequiredParticipants(poll?.required, participantNames),
+    [poll?.required, participantNames]
+  );
+  const pollForRecommendations = useMemo<PollMeta | null>(
+    () => (poll ? { ...poll, required: activeRequiredNames } : null),
+    [poll, activeRequiredNames]
+  );
+  const total = participantNames.length;
+  const requiredCount = activeRequiredNames.length;
+  const recs = useMemo<Candidate[]>(
+    () => (pollForRecommendations ? computeCandidates(pollForRecommendations, responses) : []),
+    [pollForRecommendations, responses]
+  );
+  const currentRecommendationSnapshot = useMemo<RecommendationSnapshot | null>(
+    () =>
+      pollForRecommendations
+        ? {
+            recommendations: recs,
+            total,
+            requiredCount,
+            poll: pollForRecommendations,
+          }
+        : null,
+    [pollForRecommendations, recs, total, requiredCount]
+  );
+  const visibleRecommendationSnapshot =
+    recommendationsUpdating && displayedRecommendationSnapshot ? displayedRecommendationSnapshot : currentRecommendationSnapshot;
+  const visibleRecs = visibleRecommendationSnapshot?.recommendations ?? [];
+  const visibleTotal = visibleRecommendationSnapshot?.total ?? total;
+  const visibleRequiredCount = visibleRecommendationSnapshot?.requiredCount ?? requiredCount;
 
   const finalStats = useMemo(() => {
-    if (!poll || !poll.final) return null;
-    return evaluateSlot(poll, responses, poll.final.date, poll.final.startMin, poll.final.endMin);
-  }, [poll, responses]);
+    if (!pollForRecommendations || !pollForRecommendations.final) return null;
+    return evaluateSlot(
+      pollForRecommendations,
+      responses,
+      pollForRecommendations.final.date,
+      pollForRecommendations.final.startMin,
+      pollForRecommendations.final.endMin
+    );
+  }, [pollForRecommendations, responses]);
 
   // Regenerate the confirmation message whenever the confirmed slot changes,
   // unless the user has started editing it by hand.
   useEffect(() => {
-    if (!poll || !poll.final || !finalStats || msgEdited) return;
+    if (!pollForRecommendations || !pollForRecommendations.final || !finalStats || msgEdited) return;
     setMsgText(
       buildConfirmationMessage(
-        { ...poll.final, avail: finalStats.avail, okAny: finalStats.okAny, reqOk: finalStats.reqOk },
-        poll,
-        total
+        { ...pollForRecommendations.final, avail: finalStats.avail, okAny: finalStats.okAny, reqOk: finalStats.reqOk },
+        pollForRecommendations,
+        total,
+        recs
       )
     );
-  }, [poll, finalStats, total, msgEdited]);
+  }, [pollForRecommendations, finalStats, total, msgEdited, recs]);
 
   useEffect(() => {
     if (!messageModalOpen) return;
@@ -116,6 +232,24 @@ export function ResultsPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [messageModalOpen]);
+
+  useEffect(() => {
+    if (!durationEditorOpen || savingDuration) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDurationEditorOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [durationEditorOpen, savingDuration]);
+
+  useEffect(() => {
+    if (!responseEditorOpen || deletingResponses) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setResponseEditorOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [responseEditorOpen, deletingResponses]);
 
   useEffect(() => {
     return () => {
@@ -136,39 +270,57 @@ export function ResultsPage() {
 
   const sl = slots(poll);
   const map = aggregate(responses);
-  const names = Object.keys(responses);
-  const req = poll.required || [];
-  const durationHours = poll.dur % 60 === 0 ? `${poll.dur / 60}시간` : `${poll.dur}분`;
+  const names = participantNames;
+  const req = activeRequiredNames;
+  const pollForResults = visibleRecommendationSnapshot?.poll ?? pollForRecommendations ?? poll;
+  const durationText = durationLabel(poll.dur);
 
-  async function toggleRequired(name: string) {
-    if (!id || !poll) return;
-    const next = req.includes(name) ? req.filter((n) => n !== name) : [...req, name];
+  function beginRecommendationUpdate(): { updateId: number; startedAt: number } {
     const updateId = recommendationUpdateIdRef.current + 1;
     recommendationUpdateIdRef.current = updateId;
     if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
 
-    const previousPoll = poll;
-    const startedAt = Date.now();
-    setDisplayedRecs(visibleRecs);
+    setDisplayedRecommendationSnapshot(visibleRecommendationSnapshot ?? currentRecommendationSnapshot);
     setRecommendationsUpdating(true);
-    setSelectedRecommendationIdx(null);
+    return { updateId, startedAt: Date.now() };
+  }
+
+  function finishRecommendationUpdate(updateId: number, startedAt: number) {
+    if (recommendationUpdateIdRef.current !== updateId) return;
+    if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
+    const remainingMs = Math.max(0, recommendationUpdateMinMs - (Date.now() - startedAt));
+    recommendationUpdateTimerRef.current = window.setTimeout(() => {
+      if (recommendationUpdateIdRef.current !== updateId) return;
+      setSelectedRecommendationIdx(0);
+      setRecommendationsUpdating(false);
+      setDisplayedRecommendationSnapshot(null);
+      recommendationUpdateTimerRef.current = undefined;
+    }, remainingMs);
+  }
+
+  function cancelRecommendationUpdate(updateId: number) {
+    if (recommendationUpdateIdRef.current !== updateId) return;
+    if (recommendationUpdateTimerRef.current !== undefined) window.clearTimeout(recommendationUpdateTimerRef.current);
+    setRecommendationsUpdating(false);
+    setDisplayedRecommendationSnapshot(null);
+    recommendationUpdateTimerRef.current = undefined;
+  }
+
+  async function toggleRequired(name: string) {
+    if (!id || !poll) return;
+    const next = req.includes(name) ? req.filter((n) => n !== name) : [...req, name];
+    const previousPoll = poll;
+    const { updateId, startedAt } = beginRecommendationUpdate();
     setPoll({ ...poll, required: next });
 
     try {
       const updated = await updatePoll(id, { required: next });
       setPoll(updated);
-      const remainingMs = Math.max(0, recommendationUpdateMinMs - (Date.now() - startedAt));
-      recommendationUpdateTimerRef.current = window.setTimeout(() => {
-        if (recommendationUpdateIdRef.current !== updateId) return;
-        setSelectedRecommendationIdx(0);
-        setRecommendationsUpdating(false);
-        recommendationUpdateTimerRef.current = undefined;
-      }, remainingMs);
+      finishRecommendationUpdate(updateId, startedAt);
     } catch {
       if (recommendationUpdateIdRef.current === updateId) {
         setPoll(previousPoll);
-        setRecommendationsUpdating(false);
-        recommendationUpdateTimerRef.current = undefined;
+        cancelRecommendationUpdate(updateId);
         showToast("필수 참석자 변경에 실패했습니다");
       }
     }
@@ -183,28 +335,72 @@ export function ResultsPage() {
     setMsgEdited(false);
   }
 
-  async function onSeed() {
-    if (!id) return;
-    const result = await seedDemo(id);
-    if (result.added > 0) {
-      showToast(`데모 응답 ${result.added}명이 추가되었습니다`);
-      refetch();
-    } else {
-      showToast("추가할 수 있는 데모 이름이 없습니다");
+  function openResponseEditor() {
+    setSelectedResponseIds([]);
+    setResponseEditorOpen(true);
+  }
+
+  async function saveMeetingDuration(duration: number) {
+    if (!id || !poll || savingDuration) return;
+    const { updateId, startedAt } = beginRecommendationUpdate();
+    setSavingDuration(true);
+    try {
+      const updated = await updatePoll(id, { dur: duration });
+      setPoll(updated);
+      setMsgEdited(false);
+      setDurationEditorOpen(false);
+      showToast("예상 소요 시간을 수정했습니다");
+      finishRecommendationUpdate(updateId, startedAt);
+    } catch {
+      cancelRecommendationUpdate(updateId);
+      showToast("예상 소요 시간 수정에 실패했습니다");
+    } finally {
+      setSavingDuration(false);
+    }
+  }
+
+  function toggleResponseSelection(responseId: number) {
+    setSelectedResponseIds((ids) =>
+      ids.includes(responseId) ? ids.filter((id) => id !== responseId) : [...ids, responseId]
+    );
+  }
+
+  async function deleteSelectedResponses() {
+    if (!id || deletingResponses || selectedResponseIds.length === 0) return;
+
+    const { updateId, startedAt } = beginRecommendationUpdate();
+    setDeletingResponses(true);
+    let deletedCount = 0;
+    try {
+      for (const responseId of selectedResponseIds) {
+        await deleteResponse(id, responseId);
+        deletedCount += 1;
+      }
+      showToast(`${deletedCount}개 응답을 삭제했습니다`);
+      setSelectedResponseIds([]);
+      setResponseEditorOpen(false);
+    } catch {
+      if (deletedCount > 0) {
+        setSelectedResponseIds([]);
+        showToast(`${deletedCount}개 응답을 삭제했습니다. 일부 응답은 삭제하지 못했습니다`);
+      } else {
+        showToast("응답 삭제에 실패했습니다");
+      }
+    } finally {
+      setDeletingResponses(false);
+      await refetch();
+      finishRecommendationUpdate(updateId, startedAt);
     }
   }
 
   const dk = detailKey;
   const de = dk ? map[dk] || { best: [], ok: [] } : null;
   const detailTitle = dk ? detailSlotTitle(dk) : null;
-  const detailPanelTitle = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려보세요";
-  const detailOkCount = de ? de.ok.length : null;
-  const detailPeople: DetailPerson[] = de
-    ? names.map((name) => ({
-        name,
-        status: de.best.includes(name) || de.ok.includes(name) ? "available" : "unavailable",
-      }))
-    : [];
+  const detailPanelTime = detailTitle ? `${detailTitle.date} ${detailTitle.time}` : "시간표에 마우스를 올려 보세요";
+  const detailPeople: DetailPerson[] = names.map((name) => ({
+    name,
+    status: de ? (de.best.includes(name) || de.ok.includes(name) ? "available" : "unavailable") : "neutral",
+  }));
 
   const finalIdx = poll.final
     ? visibleRecs.findIndex((c) => c.date === poll.final!.date && c.startMin === poll.final!.startMin && c.endMin === poll.final!.endMin)
@@ -212,13 +408,28 @@ export function ResultsPage() {
   const selectedRecommendationExists =
     selectedRecommendationIdx !== null && selectedRecommendationIdx >= 0 && selectedRecommendationIdx < visibleRecs.length;
   const activeRecommendationIdx = selectedRecommendationExists ? selectedRecommendationIdx : visibleRecs.length ? 0 : -1;
-  const hasActiveRecommendation = activeRecommendationIdx >= 0 && activeRecommendationIdx < visibleRecs.length;
-  const activeRecommendationIsFinal = hasActiveRecommendation && activeRecommendationIdx === finalIdx;
-  const confirmRecommendationLabel = !hasActiveRecommendation
-    ? "모일 시간을 선택해 주세요"
-    : "선택한 시간으로 공유하기";
   const timetableGridColumns = buildTimetableGridColumns(poll.dates.length);
   const timetableWidth = timetableContentWidth(poll.dates.length);
+  const recommendationOverlays = placeRecommendationLabels(
+    visibleRecs.reduce<RecommendationOverlay[]>((items, c, i) => {
+      const dateIndex = poll.dates.indexOf(c.date);
+      const startIndex = sl.indexOf(c.startMin);
+      const slotCount = Math.max(1, Math.round((c.endMin - c.startMin) / SLOT_MINUTES));
+      if (dateIndex < 0 || startIndex < 0) return items;
+      const active = activeRecommendationIdx === i;
+      items.push({
+        c,
+        i,
+        dateIndex,
+        startIndex,
+        slotCount,
+        labelBelow: startIndex === 0,
+        active,
+        labelBg: active ? recommendationHighlightLabelBg : inactiveRecommendationHighlightLabelBg,
+      });
+      return items;
+    }, [])
+  );
 
   function selectRecommendation(idx: number) {
     if (recommendationsUpdating) return;
@@ -227,49 +438,89 @@ export function ResultsPage() {
     if (candidate) setDetailKey(`${candidate.date}_${candidate.startMin}`);
   }
 
-  async function onConfirmRecommendation() {
-    if (!hasActiveRecommendation || !poll || recommendationsUpdating) return;
-    const candidate = visibleRecs[activeRecommendationIdx];
-    if (!activeRecommendationIsFinal) await onPick(activeRecommendationIdx);
-    setMsgText(buildConfirmationMessage(candidate, poll, total));
+  async function onShareRecommendation(idx: number) {
+    if (!poll || recommendationsUpdating) return;
+    const candidate = visibleRecs[idx];
+    if (!candidate) return;
+    if (idx !== finalIdx) await onPick(idx);
+    setMsgText(buildConfirmationMessage(candidate, pollForResults, visibleTotal, visibleRecs));
     setMsgEdited(false);
-    setSelectedRecommendationIdx(activeRecommendationIdx);
+    setSelectedRecommendationIdx(idx);
     setMessageModalOpen(true);
   }
 
   return (
     <div style={{ ...pagePadding, padding: "36px 20px 100px" }}>
-      <div style={{ width: "100%", maxWidth: 1180 }}>
+      <div style={{ width: "100%", maxWidth: 1040 }}>
         <div style={{ marginBottom: 24 }}>
-          <div style={{ ...pageTitle, maxWidth: 820 }}>
-            <span>{durationHours}</span>{" "}<span>{pollTitle(poll)}</span>
-            <span style={{ color: "var(--color-ink-muted)" }}>,<br></br>언제 모일까요?</span>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ ...pageTitle, maxWidth: 820, minWidth: 0 }}>
+              <span>{durationText}</span>{" "}<span>{pollTitle(poll)}</span>
+              <span>,<br></br>언제 모일까요?</span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+              <SecondaryButton
+                onClick={() => copyText(pollJoinLink(poll.id), () => showToast("링크가 복사되었습니다"))}
+                style={{ flex: "none", whiteSpace: "nowrap", padding: "10px 20px", fontSize: 16, fontWeight: 600, minHeight: 44 }}
+              >
+                응답 링크 복사
+              </SecondaryButton>
+              <PrimaryButton
+                onClick={() => navigate(`/vote/${poll.id}/join`)}
+                style={{ flex: "none", whiteSpace: "nowrap", padding: "10px 20px", fontSize: 16, fontWeight: 600, minHeight: 44 }}
+              >
+                응답 추가하기
+              </PrimaryButton>
+            </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ ...metaText, ...tabularNumberStyle }}>{responseCountText(total)}</div>
+            <button
+              type="button"
+              onClick={() => setDurationEditorOpen(true)}
+              style={{
+                minHeight: 32,
+                border: "1px solid var(--color-hairline)",
+                borderRadius: "var(--radius-full)",
+                background: "#fff",
+                color: "var(--color-ink-muted)",
+                padding: "5px 12px",
+                fontSize: 14,
+                fontWeight: 600,
+                lineHeight: 1.35,
+                letterSpacing: 0,
+                cursor: "pointer",
+                flex: "none",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--color-canvas-soft)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#fff";
+              }}
+            >
+              소요 시간 수정
+            </button>
           </div>
         </div>
 
-        {total > 0 ? (
+        {visibleTotal > 0 ? (
           <>
-            <div style={{ ...card, minWidth: 0, padding: 16, marginBottom: 20 }}>
-              <RecommendationCarousel
-                recommendations={visibleRecs}
-                activeIdx={activeRecommendationIdx}
-                finalIdx={finalIdx}
-                total={total}
-                durationMinutes={poll.dur}
-                requiredCount={req.length}
-                confirmLabel={confirmRecommendationLabel}
-                hasActiveRecommendation={hasActiveRecommendation}
-                updating={recommendationsUpdating}
-                onSelect={selectRecommendation}
-                onConfirm={onConfirmRecommendation}
-              />
-            </div>
+          <div style={{ ...card, minWidth: 0, padding: 0, marginBottom: 20 }}>
+            <RecommendationCarousel
+              recommendations={visibleRecs}
+              activeIdx={activeRecommendationIdx}
+              total={visibleTotal}
+              requiredCount={visibleRequiredCount}
+              updating={recommendationsUpdating}
+              onSelect={selectRecommendation}
+              onShare={onShareRecommendation}
+            />
+          </div>
 
-            <div className="results-layout">
-              <div style={{ ...card, minWidth: 0, padding: 16 }}>
+          <div className="results-layout">
+            <div className="results-main-panel">
+              <div style={{ ...card, minWidth: 0, padding: 0 }}>
                 <TimetableScrollFrame>
                   <div style={{ width: timetableWidth, userSelect: "none" }}>
                     <div style={{ display: "grid", gridTemplateColumns: timetableGridColumns, marginBottom: 4 }}>
@@ -306,21 +557,19 @@ export function ResultsPage() {
                                   background: bg,
                                   outline: hovered ? "2px dashed rgba(31, 30, 28, 0.72)" : "none",
                                   outlineOffset: -1,
-                                  zIndex: hovered ? 1 : 0,
+                                  zIndex: hovered ? timetableLayerZIndex.cellHover : 0,
                                 }}
                               />
                             );
                           })}
                         </div>
                       ))}
-                      {visibleRecs.map((c, i) => {
-                        const dateIndex = poll.dates.indexOf(c.date);
-                        const startIndex = sl.indexOf(c.startMin);
-                        const slotCount = Math.max(1, Math.round((c.endMin - c.startMin) / SLOT_MINUTES));
-                        if (dateIndex < 0 || startIndex < 0) return null;
-                        const labelBelow = startIndex === 0;
-                        const active = activeRecommendationIdx === i;
-                        const labelBg = active ? recommendationHighlightLabelBg : inactiveRecommendationHighlightLabelBg;
+                      <div style={{ display: "grid", gridTemplateColumns: timetableGridColumns }}>
+                        <div style={timetableEndAxisLabelStyle}>
+                          {timetableAxisText(poll.endHour * 60)}
+                        </div>
+                      </div>
+                      {recommendationOverlays.map(({ c, i, dateIndex, startIndex, slotCount, active }) => {
                         return (
                           <div
                             key={`${c.date}_${c.startMin}_${i}`}
@@ -334,7 +583,9 @@ export function ResultsPage() {
                               display: "grid",
                               gridTemplateColumns: timetableGridColumns,
                               pointerEvents: "none",
-                              zIndex: active ? 3 : 2,
+                              zIndex: active
+                                ? timetableLayerZIndex.activeRecommendationHighlight
+                                : timetableLayerZIndex.recommendationHighlight,
                               opacity: recommendationsUpdating ? 0.34 : 1,
                               filter: recommendationsUpdating ? "saturate(0.55)" : "saturate(1)",
                               transitionProperty: "opacity, filter",
@@ -357,8 +608,45 @@ export function ResultsPage() {
                                   borderRadius: 9,
                                   boxSizing: "border-box",
                                   background: active ? "rgba(31, 30, 28, 0.04)" : "transparent",
+                                  boxShadow: active ? recommendationHighlightShadow : "none",
+                                  transitionProperty: "box-shadow, background",
+                                  transitionDuration: "180ms",
+                                  transitionTimingFunction: "ease-out",
                                 }}
                               />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {recommendationOverlays.map(({ c, i, dateIndex, startIndex, slotCount, labelBelow, active, labelBg }) => {
+                        return (
+                          <div
+                            key={`${c.date}_${c.startMin}_${i}_label`}
+                            aria-hidden="true"
+                            style={{
+                              position: "absolute",
+                              top: startIndex * timetableSlotHeight,
+                              left: 0,
+                              right: 0,
+                              height: slotCount * timetableSlotHeight,
+                              display: "grid",
+                              gridTemplateColumns: timetableGridColumns,
+                              pointerEvents: "none",
+                              zIndex: timetableLayerZIndex.recommendationLabel,
+                              opacity: recommendationsUpdating ? 0.34 : 1,
+                              filter: recommendationsUpdating ? "saturate(0.55)" : "saturate(1)",
+                              transitionProperty: "opacity, filter",
+                              transitionDuration: "180ms",
+                              transitionTimingFunction: "ease-out",
+                            }}
+                          >
+                            <div
+                              style={{
+                                gridColumn: `${dateIndex + 2} / ${dateIndex + 3}`,
+                                position: "relative",
+                                height: "100%",
+                              }}
+                            >
                               <span
                                 style={{
                                   position: "absolute",
@@ -407,114 +695,112 @@ export function ResultsPage() {
                   </div>
                 </TimetableScrollFrame>
               </div>
+            </div>
 
-              <div className="results-side-panel">
+            <div className="results-side-panel">
+              <div
+                className="time-detail-card"
+                style={{
+                  ...card,
+                  color: "var(--time-detail-ink)",
+                  gap: 12,
+                  background: "transparent",
+                  padding: "0 0 4px",
+                }}
+              >
                 <div
-                  className="time-detail-card"
-                  style={{
-                    ...card,
-                    color: "var(--time-detail-ink)",
-                    gap: 12,
-                    background: "var(--time-detail-bg)",
-                    border: "1px solid var(--time-detail-border)",
-                    boxShadow: "0 16px 34px rgba(31, 30, 28, 0.22), 0 2px 8px rgba(31, 30, 28, 0.12)",
-                  }}
+                  style={
+                    detailTitle
+                      ? { fontSize: 19, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0, color: "var(--time-detail-ink)", textWrap: "balance" as const }
+                      : { ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }
+                  }
                 >
-                  <div style={{ ...cardTitle, color: "var(--time-detail-ink)" }}>
-                    {detailTitle ? (
-                      <>
-                        <span>{detailTitle.date}</span> <span style={tabularNumberStyle}>{detailTitle.time}</span>
-                      </>
-                    ) : (
-                      detailPanelTitle
-                    )}
+                  {detailTitle ? (
+                    <>
+                      <span>{detailTitle.date}</span>{" "}
+                      <span style={tabularNumberStyle}>{detailTitle.time}</span>
+                    </>
+                  ) : (
+                    detailPanelTime
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ ...captionText, color: "var(--time-detail-ink)", fontWeight: 700 }}>
+                    응답자
                   </div>
-                  {!detailTitle && (
-                    <div style={{ ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }}>
-                      블록에 마우스를 올려 보세요
-                    </div>
-                  )}
-                  {detailTitle && <NameChips people={detailPeople} />}
-                  {detailOkCount !== null && detailOkCount > 0 && (
-                    <div
-                      style={{
-                        ...captionText,
-                        color: "var(--time-detail-warn-text)",
-                        background: "var(--time-detail-warn-bg)",
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                        ...tabularNumberStyle,
-                      }}
-                    >
-                      {detailOkCount}명에게는 이 시간이 부담스러울 수 있어요
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={openResponseEditor}
+                    style={{
+                      minHeight: 32,
+                      border: "1px solid var(--color-hairline)",
+                      borderRadius: "var(--radius-full)",
+                      background: "#fff",
+                      color: "var(--color-ink-muted)",
+                      padding: "5px 12px",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      lineHeight: 1.35,
+                      letterSpacing: 0,
+                      cursor: "pointer",
+                      flex: "none",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "var(--color-canvas-soft)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#fff";
+                    }}
+                  >
+                    수정
+                  </button>
                 </div>
+                <NameChips people={detailPeople} />
+              </div>
 
-                <div style={accordionCard}>
-                  <AccordionHeader
-                    title="필수 참석자 지정"
-                    summary={req.length ? `${req.length}명` : ""}
-                    summaryPlacement="inline"
-                    open={requiredOpen}
-                    panelId={requiredPanelId}
-                    onToggle={() => setRequiredOpen((open) => !open)}
-                  />
-                  <AccordionPanel id={requiredPanelId} open={requiredOpen}>
-                    <div style={{ ...metaText, marginBottom: 12, textWrap: "pretty" }}>
-                      필수 참석자가 모두 가능한 시간을 우선 추천합니다.
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column" }}>
-                      {names.map((n) => {
-                        const checked = req.includes(n);
-                        return (
-                          <label
-                            key={n}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 5, cursor: "pointer", fontSize: 16, lineHeight: 1.45, letterSpacing: 0 }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleRequired(n)}
-                              style={{ accentColor: "var(--color-primary)", width: 16, height: 16 }}
-                            />
-                            <span style={{ flex: 1 }}>{n}</span>
-                            {checked && (
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  lineHeight: 1.4,
-                                  letterSpacing: 0,
-                                  color: "var(--color-primary)",
-                                  border: "1px solid var(--color-primary-ring)",
-                                  borderRadius: 9999,
-                                  padding: "1px 8px",
-                                }}
-                              >
-                                필수
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </AccordionPanel>
-                </div>
-
+              <div style={accordionCard}>
+                <AccordionHeader
+                  title="필수 참석자"
+                  summary={req.length ? `${req.length}명` : ""}
+                  summaryPlacement="inline"
+                  open={requiredOpen}
+                  panelId={requiredPanelId}
+                  onToggle={() => setRequiredOpen((open) => !open)}
+                />
+                <AccordionPanel id={requiredPanelId} open={requiredOpen}>
+                  <div style={{ ...metaText, marginBottom: 12, textWrap: "pretty" }}>
+                    필수 참석자가 가능한 시간을 우선 추천합니다.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {names.map((n) => {
+                      const checked = req.includes(n);
+                      return (
+                        <label
+                          key={n}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 5, cursor: "pointer", fontSize: 16, lineHeight: 1.45, letterSpacing: 0 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleRequired(n)}
+                            style={{ accentColor: "var(--color-primary)", width: 16, height: 16 }}
+                          />
+                          <span style={{ flex: 1 }}>{n}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </AccordionPanel>
               </div>
             </div>
+          </div>
           </>
         ) : (
-          <div style={{ background: "var(--color-canvas-soft)", border: "1px dashed #d9d5d1", borderRadius: 16, padding: 48, textAlign: "center" }}>
-            <div style={{ ...supportingText, marginBottom: 16 }}>
-              아직 응답이 없습니다. 링크를 공유하거나 데모 응답을 채워 보세요.
-            </div>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-              <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>참석자로 응답하기</PrimaryButton>
-              <UtilityButton onClick={onSeed}>데모 응답 7명 채우기</UtilityButton>
+          <div style={{ padding: "24px 0 0", textAlign: "center" }}>
+            <div style={supportingText}>
+              아직 응답이 없습니다.<br></br>참가자들에게 응답 링크를 공유해보세요.
             </div>
           </div>
         )}
@@ -530,6 +816,28 @@ export function ResultsPage() {
           onCopy={() => copyText(msgText, () => showToast("클립보드에 복사되었습니다"))}
         />
       )}
+      {durationEditorOpen && (
+        <MeetingDurationEditorModal
+          poll={poll}
+          saving={savingDuration}
+          onClose={() => {
+            if (!savingDuration) setDurationEditorOpen(false);
+          }}
+          onSave={saveMeetingDuration}
+        />
+      )}
+      {responseEditorOpen && (
+        <ResponseEditorModal
+          participants={responseParticipants}
+          selectedIds={selectedResponseIds}
+          deleting={deletingResponses}
+          onToggle={toggleResponseSelection}
+          onClose={() => {
+            if (!deletingResponses) setResponseEditorOpen(false);
+          }}
+          onDelete={deleteSelectedResponses}
+        />
+      )}
     </div>
   );
 }
@@ -537,115 +845,224 @@ export function ResultsPage() {
 function RecommendationCarousel({
   recommendations,
   activeIdx,
-  finalIdx,
   total,
-  durationMinutes,
   requiredCount,
-  confirmLabel,
-  hasActiveRecommendation,
   updating,
   onSelect,
-  onConfirm,
+  onShare,
 }: {
   recommendations: Candidate[];
   activeIdx: number;
-  finalIdx: number;
   total: number;
-  durationMinutes: number;
   requiredCount: number;
-  confirmLabel: string;
-  hasActiveRecommendation: boolean;
   updating: boolean;
   onSelect: (idx: number) => void;
-  onConfirm: () => void;
+  onShare: (idx: number) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const helpRef = useRef<HTMLDivElement | null>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  const updateEdges = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const maxScrollLeft = el.scrollWidth - el.clientWidth;
+    const next = {
+      left: el.scrollLeft > 1,
+      right: maxScrollLeft - el.scrollLeft > 1,
+    };
+    setEdges((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+  }, []);
+
+  const scrollByDirection = useCallback((direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({
+      left: el.clientWidth * 0.7 * (direction === "left" ? -1 : 1),
+      behavior: "smooth",
+    });
+  }, []);
+
+  useEffect(() => {
+    updateEdges();
+  });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", updateEdges, { passive: true });
+    window.addEventListener("resize", updateEdges);
+
+    const resizeObserver = new ResizeObserver(updateEdges);
+    resizeObserver.observe(el);
+    if (el.firstElementChild) resizeObserver.observe(el.firstElementChild);
+
+    updateEdges();
+
+    return () => {
+      el.removeEventListener("scroll", updateEdges);
+      window.removeEventListener("resize", updateEdges);
+      resizeObserver.disconnect();
+    };
+  }, [recommendations.length, updateEdges]);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+
+    function onPointerDown(e: PointerEvent) {
+      if (!helpRef.current?.contains(e.target as Node)) setHelpOpen(false);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setHelpOpen(false);
+    }
+
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [helpOpen]);
+
   return (
     <section className="recommendation-panel-content" aria-busy={updating}>
       <div className="recommendation-carousel-heading">
-        <div style={{ minWidth: 0 }}>
+        <div className="recommendation-heading-title-row">
           <div style={{ ...cardTitle, color: "var(--color-ink)" }}>추천 시간</div>
+          <div ref={helpRef} className="recommendation-help">
+            <button
+              type="button"
+              className="recommendation-help-button"
+              aria-label="추천 기준 보기"
+              aria-expanded={helpOpen}
+              aria-controls="recommendation-help-tooltip"
+              onClick={() => setHelpOpen((open) => !open)}
+            >
+              <QuestionMarkIcon />
+            </button>
+            {helpOpen && (
+              <div id="recommendation-help-tooltip" className="recommendation-help-tooltip" role="tooltip">
+                <button
+                  type="button"
+                  className="recommendation-help-close"
+                  aria-label="추천 기준 도움말 닫기"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  <CloseIcon />
+                </button>
+                <div className="recommendation-help-copy">
+                  필참자가 있으면 모두 가능한 시간을 먼저 보고, 필참 가능 인원, 전체 가능 인원, 선호 표시가 많은 순으로 추천해요.
+                  같은 날짜에서는 시간이 겹치는 후보를 제외합니다.
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      <PrimaryButton
-        className="recommendation-confirm-button"
-        onClick={onConfirm}
-        disabled={!hasActiveRecommendation || updating}
-        style={{ minHeight: 40, padding: "8px 16px", fontSize: 15, whiteSpace: "nowrap" }}
-      >
-        {confirmLabel}
-      </PrimaryButton>
 
       {recommendations.length > 0 ? (
-        <div className="recommendation-carousel" data-updating={updating ? "true" : "false"} role="listbox" aria-label="추천 시간">
-          {recommendations.map((candidate, i) => {
-            const selected = activeIdx === i;
-            const final = finalIdx === i;
-            return (
-              <button
-                type="button"
-                key={`${candidate.date}_${candidate.startMin}_${i}`}
-                className="recommendation-carousel-card"
-                role="option"
-                aria-selected={selected}
-                disabled={updating}
-                onClick={() => onSelect(i)}
-                style={{
-                  border: selected ? "1px solid transparent" : "1px solid rgba(52, 50, 48, 0.08)",
-                  outline: selected ? "3px solid rgba(var(--color-best-rgb), 0.72)" : undefined,
-                  outlineOffset: selected ? "-3px" : undefined,
-                  background: selected ? "rgba(var(--color-best-rgb), 0.06)" : "rgba(52, 50, 48, 0.025)",
-                  boxShadow: "none",
-                  cursor: updating ? "default" : "pointer",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 24 }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      minWidth: 32,
-                      minHeight: 24,
-                      borderRadius: 9999,
-                      background: selected ? "var(--color-primary)" : "var(--color-primary-soft)",
-                      color: selected ? "#ffffff" : "var(--color-primary)",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      lineHeight: 1,
-                      letterSpacing: 0,
-                      padding: "4px 8px",
-                      ...tabularNumberStyle,
-                    }}
-                  >
-                    {rankLabel(i)}
-                  </span>
-                </div>
-
-                <div style={{ minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", columnGap: 8, rowGap: 2, fontSize: 18, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0 }}>
-                  <span>{dateShort(candidate.date)}</span>
-                  <span style={tabularNumberStyle}>{fmtMin(candidate.startMin)} ~ {fmtMin(candidate.endMin)}</span>
-                </div>
-
-                <RecommendationCriteria candidate={candidate} total={total} requiredCount={requiredCount} />
+        <div className="recommendation-carousel-frame" data-left-edge={edges.left ? "true" : "false"} data-right-edge={edges.right ? "true" : "false"}>
+          <div ref={scrollRef} className="recommendation-carousel" data-updating={updating ? "true" : "false"} role="listbox" aria-label="추천 시간">
+            {recommendations.map((candidate, i) => {
+              const selected = activeIdx === i;
+              return (
                 <div
-                  aria-hidden={candidate.okAny.length === 0}
+                  key={`${candidate.date}_${candidate.startMin}_${i}`}
+                  className="recommendation-carousel-card"
+                  role="option"
+                  aria-selected={selected}
+                  aria-disabled={updating}
+                  tabIndex={updating ? -1 : 0}
+                  onClick={() => {
+                    if (!updating) onSelect(i);
+                  }}
+                  onKeyDown={(e) => {
+                    if (updating) return;
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(i);
+                    }
+                  }}
                   style={{
-                    ...captionText,
-                    minHeight: 40,
-                    color: "var(--color-warn-text)",
-                    visibility: candidate.okAny.length > 0 ? "visible" : "hidden",
-                    ...tabularNumberStyle,
+                    border: selected ? "1px solid transparent" : "1px solid rgba(52, 50, 48, 0.08)",
+                    outline: selected ? "3px solid rgba(var(--color-best-rgb), 0.72)" : undefined,
+                    outlineOffset: selected ? "-3px" : undefined,
+                    background: selected ? "rgba(var(--color-best-rgb), 0.06)" : "rgba(52, 50, 48, 0.025)",
+                    boxShadow: "none",
+                    cursor: updating ? "default" : "pointer",
                   }}
                 >
-                  {candidate.okAny.length > 0 ? `${candidate.okAny.length}명에게는 이 시간이 부담스러울 수 있어요` : "\u00A0"}
+                  <div className="recommendation-carousel-card-inner">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 28 }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minWidth: 32,
+                          minHeight: 24,
+                          borderRadius: 9999,
+                          background: selected ? "var(--color-primary)" : "rgba(0, 0, 0, 0.055)",
+                          color: selected ? "#ffffff" : "rgba(0, 0, 0, 0.68)",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          letterSpacing: 0,
+                          padding: "4px 8px",
+                          ...tabularNumberStyle,
+                        }}
+                      >
+                        {rankLabel(i)}
+                      </span>
+                      <button
+                        type="button"
+                        className="recommendation-card-share"
+                        aria-label={`${rankLabel(i)} 시간으로 공유하기`}
+                        disabled={updating}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onShare(i);
+                        }}
+                      >
+                        <ShareIcon />
+                      </button>
+                    </div>
+
+                    <div className="recommendation-card-time">
+                      <span>{dateShort(candidate.date)}</span>
+                      <span style={tabularNumberStyle}>{fmtMin(candidate.startMin)} ~ {fmtMin(candidate.endMin)}</span>
+                    </div>
+
+                    <RecommendationCriteria
+                      candidate={candidate}
+                      total={total}
+                      requiredCount={requiredCount}
+                      highlight={recommendationHighlight(candidate, recommendations, total)}
+                    />
+                  </div>
                 </div>
-              </button>
-            );
-          })}
+              );
+            })}
+          </div>
+          <div className="recommendation-carousel-edge recommendation-carousel-edge--left" aria-hidden={!edges.left}>
+            <ScrollButton direction="left" disabled={!edges.left || updating} onClick={() => scrollByDirection("left")} />
+          </div>
+          <div className="recommendation-carousel-edge recommendation-carousel-edge--right" aria-hidden={!edges.right}>
+            <ScrollButton direction="right" disabled={!edges.right || updating} onClick={() => scrollByDirection("right")} />
+          </div>
         </div>
       ) : (
-        <div className="recommendation-empty" style={{ ...metaText, background: "var(--color-canvas-soft)", borderRadius: 8, padding: "14px 16px", textWrap: "pretty" }}>
-          필수 참석자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요.
+        <div
+          className="recommendation-empty"
+          data-updating={updating ? "true" : "false"}
+          style={{ ...metaText, padding: "2px 0 0", textWrap: "pretty" }}
+        >
+          {requiredCount > 0
+            ? "필수 참석자가 모두 가능한 연속 시간이 없습니다. 필수 지정을 조정해 보세요."
+            : "추천할 수 있는 연속 시간이 없습니다. 참석자 응답을 확인해 주세요."}
         </div>
       )}
     </section>
@@ -654,6 +1071,41 @@ function RecommendationCarousel({
 
 function rankLabel(index: number): string {
   return `${index + 1}순위`;
+}
+
+function durationParts(minutes: number): { hours: number; minutes: number } {
+  return {
+    hours: Math.floor(minutes / 60),
+    minutes: minutes % 60,
+  };
+}
+
+function maxDurationMinutes(poll: Pick<PollMeta, "startHour" | "endHour">): number {
+  return Math.max(SLOT_MINUTES, (poll.endHour - poll.startHour) * 60);
+}
+
+function durationHourOptions(poll: Pick<PollMeta, "startHour" | "endHour">): number[] {
+  const maxHours = Math.floor(maxDurationMinutes(poll) / 60);
+  return Array.from({ length: maxHours + 1 }, (_, hour) => hour);
+}
+
+function durationValidationMessage(poll: Pick<PollMeta, "startHour" | "endHour">, duration: number): string {
+  if (duration <= 0) return "소요 시간을 선택해 주세요";
+  if (duration % SLOT_MINUTES !== 0) return `${SLOT_MINUTES}분 단위로 선택해 주세요`;
+  if (duration > maxDurationMinutes(poll)) return "소요 시간이 조사 시간대보다 길어요";
+  return "";
+}
+
+function clampDurationParts(
+  poll: Pick<PollMeta, "startHour" | "endHour">,
+  hours: number,
+  minutes: number
+): { hours: number; minutes: number } {
+  const maxDuration = maxDurationMinutes(poll);
+  let total = hours * 60 + minutes;
+  if (total <= 0) total = SLOT_MINUTES;
+  if (total > maxDuration) total = Math.floor(maxDuration / SLOT_MINUTES) * SLOT_MINUTES;
+  return durationParts(total);
 }
 
 function AccordionHeader({
@@ -707,15 +1159,11 @@ function AccordionHeader({
             style={
               summaryPlacement === "inline"
                 ? {
-                    ...captionText,
+                    ...cardTitle,
                     display: "inline-flex",
-                    alignItems: "center",
-                    minHeight: 24,
-                    borderRadius: 9999,
-                    background: "var(--color-canvas-soft)",
-                    color: "var(--color-ink-muted)",
-                    padding: "2px 8px",
-                    border: "1px solid var(--color-hairline)",
+                    alignItems: "baseline",
+                    minHeight: 0,
+                    color: "var(--color-best)",
                     ...tabularNumberStyle,
                   }
                 : { ...captionText, ...tabularNumberStyle }
@@ -839,6 +1287,353 @@ function ConfirmationMessageModal({
   );
 }
 
+function MeetingDurationEditorModal({
+  poll,
+  saving,
+  onClose,
+  onSave,
+}: {
+  poll: PollMeta;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (duration: number) => void;
+}) {
+  const initialDuration = durationParts(poll.dur);
+  const [draft, setDraft] = useState(initialDuration);
+  const hourOptions = useMemo(() => durationHourOptions(poll), [poll]);
+  const draftDuration = draft.hours * 60 + draft.minutes;
+  const validationMessage = durationValidationMessage(poll, draftDuration);
+  const saveDisabled = saving || Boolean(validationMessage) || draftDuration === poll.dur;
+
+  function setDurationHours(hours: number) {
+    setDraft((current) => clampDurationParts(poll, hours, current.minutes));
+  }
+
+  function setDurationMinutes(minutes: number) {
+    setDraft((current) => clampDurationParts(poll, current.hours, minutes));
+  }
+
+  return (
+    <div
+      className="confirmation-modal-overlay"
+      role="presentation"
+      onMouseDown={() => {
+        if (!saving) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 20,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        background: "rgba(0, 0, 0, 0.28)",
+      }}
+    >
+      <div
+        className="confirmation-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meeting-duration-editor-title"
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "min(100%, 420px)",
+          maxHeight: "min(640px, calc(100vh - 40px))",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--color-surface)",
+          borderRadius: 12,
+          border: "1px solid var(--color-hairline)",
+          boxShadow: "0 18px 60px rgba(0, 0, 0, 0.18)",
+          padding: 22,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+          <div>
+            <div id="meeting-duration-editor-title" style={sectionTitle}>
+              소요 시간 수정
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <select
+                aria-label="소요 시간"
+                value={draft.hours}
+                disabled={saving}
+                onChange={(e) => setDurationHours(Number(e.target.value))}
+                style={{ ...textInput, minWidth: 0, fontVariantNumeric: "tabular-nums" }}
+              >
+                {hourOptions.map((hour) => (
+                  <option key={hour} value={hour}>
+                    {hour}
+                  </option>
+                ))}
+              </select>
+              <span style={{ ...captionText, flex: "none", fontWeight: 700 }}>시간</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <select
+                aria-label="소요 분"
+                value={draft.minutes}
+                disabled={saving}
+                onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                style={{ ...textInput, minWidth: 0, fontVariantNumeric: "tabular-nums" }}
+              >
+                {durationMinuteOptions.map((minutes) => {
+                  const optionDuration = draft.hours * 60 + minutes;
+                  return (
+                    <option
+                      key={minutes}
+                      value={minutes}
+                      disabled={optionDuration <= 0 || optionDuration > maxDurationMinutes(poll)}
+                    >
+                      {minutes}
+                    </option>
+                  );
+                })}
+              </select>
+              <span style={{ ...captionText, flex: "none", fontWeight: 700 }}>분</span>
+            </div>
+          </div>
+
+          {validationMessage ? (
+            <div style={{ ...captionText, color: "var(--color-danger)" }}>{validationMessage}</div>
+          ) : (
+            <div style={{ ...captionText }}>
+              저장하면 추천 시간이 새 기준으로 다시 계산됩니다.
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onClose}
+            style={{
+              minHeight: 40,
+              border: "1px solid var(--color-hairline)",
+              borderRadius: "var(--radius-full)",
+              background: "#fff",
+              color: "var(--color-ink)",
+              padding: "8px 18px",
+              fontSize: 15,
+              fontWeight: 600,
+              lineHeight: 1.35,
+              letterSpacing: 0,
+              cursor: saving ? "default" : "pointer",
+              opacity: saving ? 0.45 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!saving) e.currentTarget.style.background = "var(--color-canvas-soft)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#fff";
+            }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            disabled={saveDisabled}
+            onClick={() => onSave(draftDuration)}
+            style={{
+              minHeight: 40,
+              border: "none",
+              borderRadius: "var(--radius-full)",
+              background: saveDisabled ? "rgba(0, 0, 0, 0.08)" : "var(--color-primary)",
+              color: saveDisabled ? "var(--color-ink-muted)" : "#fff",
+              padding: "8px 18px",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.35,
+              letterSpacing: 0,
+              cursor: saveDisabled ? "default" : "pointer",
+            }}
+            onMouseEnter={(e) => {
+              if (!saveDisabled) e.currentTarget.style.background = "var(--color-primary-active)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = saveDisabled ? "rgba(0, 0, 0, 0.08)" : "var(--color-primary)";
+            }}
+          >
+            {saving ? "저장 중" : "저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResponseEditorModal({
+  participants,
+  selectedIds,
+  deleting,
+  onToggle,
+  onClose,
+  onDelete,
+}: {
+  participants: LabeledResponseEntry[];
+  selectedIds: number[];
+  deleting: boolean;
+  onToggle: (responseId: number) => void;
+  onClose: () => void;
+  onDelete: () => void;
+}) {
+  const selectedCount = selectedIds.length;
+  const deleteDisabled = deleting || selectedCount === 0;
+
+  return (
+    <div
+      className="confirmation-modal-overlay"
+      role="presentation"
+      onMouseDown={() => {
+        if (!deleting) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 20,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        background: "rgba(0, 0, 0, 0.28)",
+      }}
+    >
+      <div
+        className="confirmation-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="response-editor-title"
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          width: "min(100%, 420px)",
+          maxHeight: "min(640px, calc(100vh - 40px))",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--color-surface)",
+          borderRadius: 12,
+          border: "1px solid var(--color-hairline)",
+          boxShadow: "0 18px 60px rgba(0, 0, 0, 0.18)",
+          padding: 22,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+          <div>
+            <div id="response-editor-title" style={sectionTitle}>
+              응답자 수정
+            </div>
+            <div style={{ ...supportingText, marginTop: 4, ...tabularNumberStyle }}>
+              {participants.length}명 응답
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", paddingRight: 2 }}>
+          {participants.map((participant) => {
+            const checked = selectedIds.includes(participant.id);
+            return (
+              <label
+                key={participant.id}
+                style={{
+                  minHeight: 44,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  background: checked ? "rgba(var(--color-best-rgb), 0.08)" : "transparent",
+                  color: "var(--color-ink)",
+                  cursor: deleting ? "default" : "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  if (!deleting && !checked) e.currentTarget.style.background = "var(--color-canvas-soft)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!checked) e.currentTarget.style.background = "transparent";
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={deleting}
+                  onChange={() => onToggle(participant.id)}
+                  style={{ accentColor: "var(--color-primary)", width: 16, height: 16, flex: "none" }}
+                />
+                <span style={{ minWidth: 0, flex: 1, fontSize: 16, fontWeight: 600, lineHeight: 1.4, letterSpacing: 0 }}>
+                  {participant.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={onClose}
+            style={{
+              minHeight: 40,
+              border: "1px solid var(--color-hairline)",
+              borderRadius: "var(--radius-full)",
+              background: "#fff",
+              color: "var(--color-ink)",
+              padding: "8px 18px",
+              fontSize: 15,
+              fontWeight: 600,
+              lineHeight: 1.35,
+              letterSpacing: 0,
+              cursor: deleting ? "default" : "pointer",
+              opacity: deleting ? 0.45 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!deleting) e.currentTarget.style.background = "var(--color-canvas-soft)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#fff";
+            }}
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            disabled={deleteDisabled}
+            onClick={onDelete}
+            style={{
+              minHeight: 40,
+              border: "none",
+              borderRadius: "var(--radius-full)",
+              background: deleteDisabled ? "rgba(0, 0, 0, 0.08)" : "#d92d20",
+              color: deleteDisabled ? "var(--color-ink-muted)" : "#fff",
+              padding: "8px 18px",
+              fontSize: 15,
+              fontWeight: 700,
+              lineHeight: 1.35,
+              letterSpacing: 0,
+              cursor: deleteDisabled ? "default" : "pointer",
+              ...tabularNumberStyle,
+            }}
+            onMouseEnter={(e) => {
+              if (!deleteDisabled) e.currentTarget.style.background = "#b42318";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = deleteDisabled ? "rgba(0, 0, 0, 0.08)" : "#d92d20";
+            }}
+          >
+            {deleting ? "삭제 중" : selectedCount ? `${selectedCount}개 삭제` : "삭제"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChevronDownIcon({ open }: { open: boolean }) {
   return (
     <svg
@@ -866,23 +1661,26 @@ function RecommendationCriteria({
   candidate,
   total,
   requiredCount,
+  highlight,
 }: {
   candidate: Candidate;
   total: number;
   requiredCount: number;
+  highlight: string | null;
 }) {
-  const items: Array<{ label: string; checked: boolean }> = [];
+  const items: Array<{ label: string; tone: "success" | "warning" }> = [];
 
   if (requiredCount > 0) {
     items.push({
       label: candidate.reqOk ? "필수 참석자 모두 가능" : "필수 참석자 일부 불가",
-      checked: candidate.reqOk,
+      tone: candidate.reqOk ? "success" : "warning",
     });
   }
   items.push({
     label: total > 0 && candidate.avail.length === total ? "모든 참석자 가능" : `${total}명 중 ${candidate.avail.length}명 가능`,
-    checked: candidate.avail.length > 0,
+    tone: total > 0 && candidate.avail.length === total ? "success" : "warning",
   });
+  if (highlight) items.push({ label: highlight, tone: "success" });
 
   return (
     <ul style={{ display: "flex", flexDirection: "column", gap: 4, listStyle: "none", padding: 0, margin: "4px 0 0" }}>
@@ -891,10 +1689,10 @@ function RecommendationCriteria({
           key={item.label}
           style={{
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             gap: 6,
             ...metaText,
-            color: item.checked ? "var(--color-ink-muted)" : "var(--color-ink-faint)",
+            color: "var(--color-ink-muted)",
             ...tabularNumberStyle,
           }}
         >
@@ -907,10 +1705,11 @@ function RecommendationCriteria({
               alignItems: "center",
               justifyContent: "center",
               flex: "none",
-              color: item.checked ? "var(--color-best)" : "var(--color-ink-faint)",
+              marginTop: 1,
+              color: item.tone === "success" ? "var(--color-best)" : "var(--color-danger)",
             }}
           >
-            {item.checked ? <CheckIcon /> : <span style={{ width: 4, height: 4, borderRadius: 9999, background: "currentColor" }} />}
+            {item.tone === "success" ? <CheckIcon /> : <WarningIcon />}
           </span>
           <span>{item.label}</span>
         </li>
@@ -923,6 +1722,49 @@ function CheckIcon({ size = 16, strokeWidth = 2 }: { size?: number; strokeWidth?
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
       <path d="M13.3 4.4 6.6 11.1 2.9 7.4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function WarningIcon({ size = 16, strokeWidth = 2 }: { size?: number; strokeWidth?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path d="M8 3.2v6.4" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />
+      <path d="M8 12.7h.01" stroke="currentColor" strokeWidth={strokeWidth + 0.2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function QuestionMarkIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path
+        d="M5.8 5.5a2.3 2.3 0 0 1 4.5.5c0 1.7-1.8 1.9-1.8 3.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8.5 12.1h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ShareIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: size, height: size, display: "block" }}>
+      <path d="M6.4 7 9.7 5M6.4 9 9.7 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="4.6" cy="8" r="1.9" fill="currentColor" />
+      <circle cx="11.4" cy="4" r="1.9" fill="currentColor" />
+      <circle cx="11.4" cy="12" r="1.9" fill="currentColor" />
     </svg>
   );
 }
@@ -942,31 +1784,46 @@ function NameChips({ people }: { people: DetailPerson[] }) {
 
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-      {people.map(({ name, status }) => (
-        <span
-          key={`${status}-${name}`}
-          aria-label={`${name} ${status === "available" ? "가능" : "불가능"}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            minHeight: 28,
-            borderRadius: 9999,
-            background: status === "available" ? "var(--time-detail-chip-available-bg)" : "var(--time-detail-chip-bg)",
-            color: status === "available" ? "var(--time-detail-chip-available-text)" : "var(--time-detail-chip-text)",
-            border:
-              status === "available"
-                ? "1px solid var(--time-detail-chip-available-border)"
-                : "1px solid var(--time-detail-chip-border)",
-            padding: "3px 10px",
-            fontSize: 14,
-            fontWeight: 600,
-            lineHeight: 1.4,
-            letterSpacing: 0,
-          }}
-        >
-          {name}
-        </span>
-      ))}
+      {people.map(({ name, status }) => {
+        const available = status === "available";
+        const unavailable = status === "unavailable";
+        let background = "var(--time-detail-chip-bg)";
+        let color = "var(--time-detail-chip-text)";
+        let border = "1px solid var(--time-detail-chip-border)";
+
+        if (available) {
+          background = "var(--time-detail-chip-available-bg)";
+          color = "var(--time-detail-chip-available-text)";
+          border = "1px solid var(--time-detail-chip-available-border)";
+        } else if (unavailable) {
+          background = "var(--time-detail-chip-unavailable-bg)";
+          color = "var(--time-detail-chip-unavailable-text)";
+          border = "1px solid var(--time-detail-chip-unavailable-border)";
+        }
+
+        return (
+          <span
+            key={name}
+            aria-label={status === "neutral" ? name : `${name} ${available ? "가능" : "불가능"}`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: 28,
+              borderRadius: 9999,
+              background,
+              color,
+              border,
+              padding: "3px 10px",
+              fontSize: 14,
+              fontWeight: 600,
+              lineHeight: 1.4,
+              letterSpacing: 0,
+            }}
+          >
+            {name}
+          </span>
+        );
+      })}
     </div>
   );
 }

@@ -1,26 +1,35 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getPoll, seedDemo } from "../lib/api";
 import type { PollMeta } from "../lib/scheduling";
-import { pollLink, pollRangeLine, pollTitle, responseCountText } from "../lib/scheduling";
+import { pollJoinLink, pollParticipationGuide, pollRangeLine, pollTitle } from "../lib/scheduling";
 import { copyText } from "../lib/clipboard";
 import { useToast } from "../components/Toast";
 import { PrimaryButton, SecondaryButton, UtilityButton } from "../components/ui";
 import {
   card,
   cardTitle,
+  controlActionGap,
   metaText,
   pagePadding,
   pageTitle,
+  postIntroContentGap,
   sectionTitle,
   supportingText,
   textInput,
 } from "../components/uiStyles";
 
+interface LocationState {
+  created?: boolean;
+}
+
 export function PollLandingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
+  const createdFromState = Boolean((location.state as LocationState | null)?.created);
+  const isCreatorView = createdFromState;
   const [poll, setPoll] = useState<PollMeta | null>(null);
   const [notFound, setNotFound] = useState(false);
 
@@ -42,7 +51,7 @@ export function PollLandingPage() {
   }
   if (!poll) return null;
 
-  const link = pollLink(poll.id);
+  const link = pollJoinLink(poll.id);
 
   async function onSeed() {
     if (!id) return;
@@ -57,58 +66,70 @@ export function PollLandingPage() {
 
   return (
     <div style={{ ...pagePadding, padding: "48px 20px 80px" }}>
-      <div style={{ width: "100%", maxWidth: 640 }}>
+      <div style={{ width: "100%", maxWidth: 640, textAlign: "center" }}>
         <div style={{ ...pageTitle, marginBottom: 10 }}>
-          링크가 생성되었어요
+          {isCreatorView ? (
+            "링크가 생성되었어요"
+          ) : (
+            <>
+              <span>{pollTitle(poll)}</span>
+              <br />
+              <span>일정 투표 참여하기</span>
+            </>
+          )}
         </div>
-        <div style={{ ...supportingText, marginBottom: 28 }}>
-          아래 링크를 공유할 수 있습니다.
+        <div style={{ ...supportingText, marginBottom: postIntroContentGap, whiteSpace: "pre-line" }}>
+          {isCreatorView ? "아래 링크를 참석자에게 공유할 수 있습니다." : pollParticipationGuide(poll)}
         </div>
 
-        <div style={card}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={cardTitle}>{pollTitle(poll)}</div>
-            <div style={metaText}>{pollRangeLine(poll)}</div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-            <div
-              style={{
-                ...textInput,
-                flex: 1,
-                background: "var(--color-canvas-soft)",
-                color: "var(--color-ink-secondary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                padding: "9px 12px",
-              }}
-            >
-              {link}
+        <div style={{ ...card, alignItems: "center", gap: postIntroContentGap }}>
+          {isCreatorView && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
+              <div style={cardTitle}>{pollTitle(poll)}</div>
+              <div style={{ ...metaText, whiteSpace: "pre-line" }}>{pollRangeLine(poll)}</div>
             </div>
-            <UtilityButton onClick={() => copyText(link, () => showToast("링크가 복사되었습니다"))}>
-              복사
-            </UtilityButton>
-          </div>
+          )}
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: 9999, background: "var(--color-best)" }} />
-            <div style={metaText}>{responseCountText(poll.responseCount)}</div>
-          </div>
+          {isCreatorView && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: controlActionGap, width: "100%" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "stretch", width: "100%" }}>
+                <div
+                  style={{
+                    ...textInput,
+                    flex: 1,
+                    background: "var(--color-canvas-soft)",
+                    color: "var(--color-ink-secondary)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    padding: "9px 12px",
+                  }}
+                >
+                  {link}
+                </div>
+                <UtilityButton onClick={() => copyText(link, () => showToast("링크가 복사되었습니다"))}>
+                  복사
+                </UtilityButton>
+              </div>
 
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 10,
-              borderTop: "1px solid var(--color-hairline)",
-              paddingTop: 20,
-            }}
-          >
-            <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>참석자로 응답하기</PrimaryButton>
-            <SecondaryButton onClick={() => navigate(`/vote/${poll.id}/results`)}>결과 보기 (생성자)</SecondaryButton>
-            <UtilityButton onClick={onSeed}>데모 응답 7명 채우기</UtilityButton>
-          </div>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  justifyContent: "center",
+                  gap: 10,
+                }}
+              >
+                <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>응답 추가하기</PrimaryButton>
+                <SecondaryButton onClick={() => navigate(`/vote/${poll.id}/results`)}>결과 보기</SecondaryButton>
+                <UtilityButton onClick={onSeed}>데모 응답 7명 채우기</UtilityButton>
+              </div>
+            </div>
+          )}
+
+          {!isCreatorView && (
+            <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>응답하기</PrimaryButton>
+          )}
         </div>
       </div>
     </div>

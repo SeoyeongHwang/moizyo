@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { timetableScrollFrameStyle } from "../lib/timetable";
+import { timetableLayerZIndex, timetableScrollFrameStyle } from "../lib/timetable";
 
 type ScrollEdges = {
   left: boolean;
   right: boolean;
 };
 
-const edgeOverlayZIndex = 4;
 const scrollStepRatio = 0.7;
 
 export function TimetableScrollFrame({ children }: { children: ReactNode }) {
@@ -69,7 +68,7 @@ export function TimetableScrollFrame({ children }: { children: ReactNode }) {
           bottom: 0,
           left: 0,
           width: 52,
-          zIndex: edgeOverlayZIndex,
+          zIndex: timetableLayerZIndex.scrollOverlay,
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-start",
@@ -92,7 +91,7 @@ export function TimetableScrollFrame({ children }: { children: ReactNode }) {
           right: 0,
           bottom: 0,
           width: 52,
-          zIndex: edgeOverlayZIndex,
+          zIndex: timetableLayerZIndex.scrollOverlay,
           display: "flex",
           alignItems: "center",
           justifyContent: "flex-end",
@@ -112,7 +111,7 @@ export function TimetableScrollFrame({ children }: { children: ReactNode }) {
   );
 }
 
-function ScrollButton({
+export function ScrollButton({
   direction,
   disabled,
   onClick,
