@@ -1,9 +1,23 @@
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { timeAxisLabel } from "./scheduling";
 
 export const timetableLabelWidth = 66;
 export const timetableSlotHeight = 17;
+export const timetableTouchSlotHeight = 24;
 const timetableDateMinWidth = 82;
+
+export function useIsCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(() => window.matchMedia("(pointer: coarse)").matches);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  return coarse;
+}
 
 const tabularNumberStyle = { fontVariantNumeric: "tabular-nums" as const };
 
@@ -61,11 +75,11 @@ export const timetableEndAxisLabelStyle: CSSProperties = {
   height: 0,
 };
 
-export function timetableCellFrameStyle(minute: number): CSSProperties {
+export function timetableCellFrameStyle(minute: number, slotHeight = timetableSlotHeight): CSSProperties {
   const onHour = minute % 60 === 0;
   const onHalfHour = minute % 60 === 30;
   return {
-    height: timetableSlotHeight,
+    height: slotHeight,
     borderRight: "1px solid rgba(255,255,255,0.6)",
     borderTop: onHour
       ? "1px solid rgba(0,0,0,0.12)"

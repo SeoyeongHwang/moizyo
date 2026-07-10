@@ -13,6 +13,8 @@ import {
   timetableGridColumns as buildTimetableGridColumns,
   timetableLayerZIndex,
   timetableSlotHeight,
+  timetableTouchSlotHeight,
+  useIsCoarsePointer,
 } from "../lib/timetable";
 import { TimetableScrollFrame } from "../components/TimetableScrollFrame";
 import { PrimaryButton } from "../components/ui";
@@ -33,13 +35,27 @@ interface DragState {
   baseMarks: Marks;
 }
 
+interface TouchState {
+  x: number;
+  y: number;
+  key: string;
+  timer: ReturnType<typeof setTimeout>;
+  active: boolean;
+}
+
+function touchedKey(t: Touch): string | undefined {
+  return (document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null)?.dataset.key;
+}
+
 const mutedOtherCategoryBackgroundImage =
   "repeating-linear-gradient(135deg, transparent 0 13px, rgba(52, 50, 48, 0.16) 13px 14px, transparent 14px 22px), linear-gradient(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45))";
 const preferenceTooltipId = "respond-preference-tooltip";
+const longPressMs = 350;
+const touchScrollThreshold = 10;
 
-function connectedHatchPosition(dateIndex: number, dateCount: number, slotIndex: number): string {
+function connectedHatchPosition(dateIndex: number, dateCount: number, slotIndex: number, slotHeight: number): string {
   const x = dateCount <= 1 ? 0 : (dateIndex / (dateCount - 1)) * 100;
-  return `${x}% -${slotIndex * timetableSlotHeight}px, 0 0`;
+  return `${x}% -${slotIndex * slotHeight}px, 0 0`;
 }
 
 function cellPosition(key: string, dates: string[], slotValues: number[]): { dateIndex: number; slotIndex: number } | null {
@@ -91,8 +107,12 @@ export function RespondPage() {
   const [preferenceTooltipDismissed, setPreferenceTooltipDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const dragRef = useRef<DragState | null>(null);
+  const touchRef = useRef<TouchState | null>(null);
+  const touchDownRef = useRef<(key: string) => void>(() => {});
+  const touchEnterRef = useRef<(key: string) => void>(() => {});
   const catRef = useRef(cat);
   const marksRef = useRef(marks);
+  const isCoarsePointer = useIsCoarsePointer();
   catRef.current = cat;
   marksRef.current = marks;
 
@@ -116,6 +136,50 @@ export function RespondPage() {
   }, []);
 
   useEffect(() => {
+    // React의 touchmove는 passive로 등록되므로, 스크롤 차단을 위해 native 리스너를 사용한다.
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = touchRef.current;
+      const t = e.touches[0];
+      if (!touch || !t) return;
+
+      if (touch.active) {
+        e.preventDefault();
+        const key = touchedKey(t);
+        if (key) touchEnterRef.current(key);
+        return;
+      }
+
+      if (Math.hypot(t.clientX - touch.x, t.clientY - touch.y) > touchScrollThreshold) {
+        clearTimeout(touch.timer);
+        touchRef.current = null;
+      }
+    };
+
+    const cancelTouch = () => {
+      const touch = touchRef.current;
+      if (!touch) return;
+      clearTimeout(touch.timer);
+      touchRef.current = null;
+    };
+
+    const onTouchEnd = () => {
+      const touch = touchRef.current;
+      if (!touch) return;
+      if (!touch.active) touchDownRef.current(touch.key);
+      cancelTouch();
+    };
+
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("touchcancel", cancelTouch);
+    return () => {
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", cancelTouch);
+    };
+  }, []);
+
+  useEffect(() => {
     if ((!name || !password) && poll) {
       navigate(`/vote/${poll.id}/join`, { replace: true });
     }
@@ -135,17 +199,19 @@ export function RespondPage() {
   const durationText = durationLabel(poll.dur);
   const timetableGridColumns = buildTimetableGridColumns(poll.dates.length);
   const timetableWidth = timetableContentWidth(poll.dates.length);
-  const mutedOtherCategoryBackgroundSize = `${poll.dates.length * 100}% ${sl.length * timetableSlotHeight}px, auto`;
+  const slotHeight = isCoarsePointer ? timetableTouchSlotHeight : timetableSlotHeight;
+  const mutedOtherCategoryBackgroundSize = `${poll.dates.length * 100}% ${sl.length * slotHeight}px, auto`;
   const isPreferenceStep = cat === "ok";
   const showPreferenceTooltip = isPreferenceStep && !preferenceTooltipDismissed;
   const primaryActionLabel = isPreferenceStep ? "응답 제출하기" : "다음";
+  const dragHint = isCoarsePointer ? "길게 누른 뒤 드래그해서" : "드래그해서";
   const helperText = isPreferenceStep ? (
     <>
-      드래그해서 <b>가능하지만 덜 선호하는 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
+      {dragHint} <b>가능하지만 덜 선호하는 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
     </>
   ) : (
     <>
-      드래그해서 <b>가능한 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
+      {dragHint} <b>가능한 시간</b>을 표시해 주세요.<br></br>표시하지 않은 시간은 <b>불가능</b>한 시간으로 표시돼요.
     </>
   );
 
@@ -196,19 +262,25 @@ export function RespondPage() {
     handleEnter(key);
   }
 
-  function handleTouch(e: React.TouchEvent, isStart: boolean) {
-    const t = e.touches[0];
-    if (!t) return;
+  touchDownRef.current = handleDown;
+  touchEnterRef.current = handleEnter;
 
-    const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
-    const key = el?.dataset.key;
-    if (!key) return;
-
-    if (isStart) {
-      handleDown(key);
-    } else {
-      handleEnter(key);
+  function handleTouchStart(e: React.TouchEvent, key: string) {
+    if (touchRef.current) {
+      clearTimeout(touchRef.current.timer);
+      touchRef.current = null;
     }
+    const t = e.touches[0];
+    if (!t || e.touches.length > 1) return;
+
+    const timer = setTimeout(() => {
+      const touch = touchRef.current;
+      if (!touch || touch.key !== key) return;
+      touch.active = true;
+      navigator.vibrate?.(10);
+      touchDownRef.current(key);
+    }, longPressMs);
+    touchRef.current = { x: t.clientX, y: t.clientY, key, timer, active: false };
   }
 
   async function onSubmit() {
@@ -309,7 +381,7 @@ export function RespondPage() {
             </div>
 
             <TimetableScrollFrame>
-              <div style={{ width: timetableWidth, userSelect: "none", touchAction: "none" }}>
+              <div style={{ width: timetableWidth, userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", touchAction: "pan-x pan-y" }}>
                 <div style={{ display: "grid", gridTemplateColumns: timetableGridColumns, marginBottom: 4 }}>
                   <div />
                   {poll.dates.map((d) => (
@@ -340,16 +412,15 @@ export function RespondPage() {
                           }}
                           onMouseEnter={() => handleMouseEnter(key)}
                           onMouseLeave={() => setHoveredKey((prev) => (prev === key ? null : prev))}
-                          onTouchStart={(e) => handleTouch(e, true)}
-                          onTouchMove={(e) => handleTouch(e, false)}
+                          onTouchStart={(e) => handleTouchStart(e, key)}
                           style={{
-                            ...timetableCellFrameStyle(m),
+                            ...timetableCellFrameStyle(m, slotHeight),
                             position: "relative",
                             cursor: "pointer",
                             backgroundColor,
                             backgroundImage: isOtherCategoryMuted ? mutedOtherCategoryBackgroundImage : undefined,
                             backgroundSize: isOtherCategoryMuted ? mutedOtherCategoryBackgroundSize : undefined,
-                            backgroundPosition: isOtherCategoryMuted ? connectedHatchPosition(dateIndex, poll.dates.length, slotIndex) : undefined,
+                            backgroundPosition: isOtherCategoryMuted ? connectedHatchPosition(dateIndex, poll.dates.length, slotIndex, slotHeight) : undefined,
                             backgroundRepeat: isOtherCategoryMuted ? "no-repeat, no-repeat" : undefined,
                             backgroundOrigin: isOtherCategoryMuted ? "border-box" : undefined,
                             outline: hoveredKey === key ? "2px dashed rgba(31, 30, 28, 0.72)" : "none",
