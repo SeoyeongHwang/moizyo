@@ -1,0 +1,33 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "moizyo",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-05-03",
+	// SPA(client/dist)와 API를 Worker 하나로 서빙한다.
+	// /api/* 만 Worker 코드로 들어오고, 나머지는 정적 자산 → 없으면 index.html (SPA 폴백).
+	"assets": {
+		"directory": "../client/dist",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "moizyo",
+			// `npx wrangler d1 create moizyo` 실행 후 출력되는 database_id로 교체할 것.
+			"database_id": "09a88af1-479f-486c-aac8-415f2414bad3",
+			"migrations_dir": "migrations"
+		},
+		{
+			"binding": "moizyo",
+			"database_name": "moizyo",
+			"database_id": "09a88af1-479f-486c-aac8-415f2414bad3",
+			"remote": true
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getPoll, seedDemo } from "../lib/api";
+import { getPoll } from "../lib/api";
 import type { PollMeta } from "../lib/scheduling";
 import { pollJoinLink, pollParticipationGuide, pollRangeLine, pollTitle } from "../lib/scheduling";
 import { copyText } from "../lib/clipboard";
@@ -52,17 +52,6 @@ export function PollLandingPage() {
   if (!poll) return null;
 
   const link = pollJoinLink(poll.id);
-
-  async function onSeed() {
-    if (!id) return;
-    const result = await seedDemo(id);
-    if (result.added > 0) {
-      showToast(`데모 응답 ${result.added}명이 추가되었습니다`);
-      refetch();
-    } else {
-      showToast("추가할 수 있는 데모 이름이 없습니다");
-    }
-  }
 
   return (
     <div style={{ ...pagePadding, padding: "48px 20px 80px" }}>
@@ -122,7 +111,6 @@ export function PollLandingPage() {
               >
                 <PrimaryButton onClick={() => navigate(`/vote/${poll.id}/join`)}>응답 추가하기</PrimaryButton>
                 <SecondaryButton onClick={() => navigate(`/vote/${poll.id}/results`)}>결과 보기</SecondaryButton>
-                <UtilityButton onClick={onSeed}>데모 응답 7명 채우기</UtilityButton>
               </div>
             </div>
           )}

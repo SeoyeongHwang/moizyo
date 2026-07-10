@@ -87,7 +87,3 @@ export function updatePoll(
 ): Promise<PollMeta> {
   return request<PollMeta>(`/polls/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 }
-
-export function seedDemo(id: string): Promise<{ added: number }> {
-  return request<{ added: number }>(`/polls/${id}/seed-demo`, { method: "POST" });
-}
