@@ -33,7 +33,31 @@ DB는 Cloudflare D1(SQLite 호환), 주소는 무료 `*.workers.dev` 서브도�
    npx wrangler d1 migrations apply moizyo --remote
    ```
 
-## 배포 (이후 코드 바뀔 때마다 이 두 단계만)
+## 배포
+
+### GitHub 자동 배포 (기본 경로)
+
+GitHub 연동(Workers Builds)이 설정되어 있으면 배포는 git이 전부다:
+
+- `main`에 푸시 → Cloudflare가 자동으로 클라이언트 빌드 + 프로덕션 배포
+- 다른 브랜치에 푸시 → 프로덕션에 반영되지 않는 **프리뷰 버전**이 만들어지고,
+  빌드 로그에서 프리뷰 URL을 확인해 미리 테스트할 수 있다
+
+빌드 상태/로그: Cloudflare 대시보드 → Workers & Pages → moizyo → Deployments.
+
+최초 연결 방법 (1회): 대시보드 → Workers & Pages → moizyo → Settings → Builds →
+Connect로 GitHub 저장소(`SeoyeongHwang/letsmeet`)를 연결하고 다음과 같이 설정한다.
+
+| 설정 | 값 |
+| --- | --- |
+| Production branch | `main` |
+| Root directory | `/worker` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` (기본값) |
+
+(`worker/package.json`의 `build` 스크립트가 `../client`를 설치·빌드한다.)
+
+### 수동 배포 (긴급 시 대안)
 
 ```bash
 cd client && npm run build   # SPA 빌드 → client/dist
@@ -41,7 +65,8 @@ cd ../worker && npx wrangler deploy
 ```
 
 배포가 끝나면 `https://moizyo.<계정서브도메인>.workers.dev` 주소가 출력된다.
-그 링크를 그대로 공유하면 된다.
+그 링크를 그대로 공유하면 된다. GitHub 연동 후에는 git 푸시를 기본 경로로 쓰고,
+수동 배포는 CI가 죽었을 때 등 예외 상황에만 사용할 것.
 
 ## 로컬 개발
 

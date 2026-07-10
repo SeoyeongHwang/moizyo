@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "npm ci --prefix ../client && npm run build --prefix ../client",
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit"
   },
