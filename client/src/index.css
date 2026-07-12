@@ -56,6 +56,9 @@ body {
   background: var(--color-canvas);
   font-family: var(--font-sans);
   color: var(--color-ink);
+  /* 한국어 어절 중간에서 줄이 끊기지 않도록 하고, 공백 없는 긴 문자열만 예외적으로 자른다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 input,
