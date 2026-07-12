@@ -272,7 +272,7 @@ export function CreatePollPage() {
             textAlign: "center",
           }}
         >
-          모일 시간 정해요
+          우리 언제 모이죠?
         </div>
 
         <div style={card}>
