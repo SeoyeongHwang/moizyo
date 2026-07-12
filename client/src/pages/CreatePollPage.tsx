@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPoll } from "../lib/api";
 import { PrimaryButton } from "../components/ui";
@@ -16,6 +16,22 @@ const WEEKDAY_OPTIONS = WEEKDAYS.map((short, index) => ({
 }));
 
 type DateMode = "date" | "weekday";
+
+interface CalendarTouchState {
+  x: number;
+  y: number;
+  key: string;
+  timer: ReturnType<typeof setTimeout>;
+  active: boolean;
+}
+
+const longPressMs = 350;
+const touchScrollThreshold = 10;
+
+function calendarKeyAt(t: Touch): string | undefined {
+  const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
+  return el?.closest<HTMLElement>("[data-date-key]")?.dataset.dateKey;
+}
 
 const fieldErrorText: CSSProperties = {
   ...captionText,
@@ -60,6 +76,64 @@ export function CreatePollPage() {
   const [fDur, setFDur] = useState(60);
   const [dateWarning, setDateWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const selDatesRef = useRef(selDates);
+  const calendarDragRef = useRef<{ erase: boolean } | null>(null);
+  const touchRef = useRef<CalendarTouchState | null>(null);
+  const touchTapRef = useRef<(key: string) => void>(() => {});
+  const touchBeginRef = useRef<(key: string) => void>(() => {});
+  const touchDragRef = useRef<(key: string) => void>(() => {});
+  selDatesRef.current = selDates;
+
+  useEffect(() => {
+    // React의 touchmove는 passive로 등록되므로, 스크롤 차단을 위해 native 리스너를 사용한다.
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = touchRef.current;
+      const t = e.touches[0];
+      if (!touch || !t) return;
+
+      if (touch.active) {
+        e.preventDefault();
+        const key = calendarKeyAt(t);
+        if (key) touchDragRef.current(key);
+        return;
+      }
+
+      if (Math.hypot(t.clientX - touch.x, t.clientY - touch.y) > touchScrollThreshold) {
+        clearTimeout(touch.timer);
+        touchRef.current = null;
+      }
+    };
+
+    const cancelTouch = () => {
+      calendarDragRef.current = null;
+      const touch = touchRef.current;
+      if (!touch) return;
+      clearTimeout(touch.timer);
+      touchRef.current = null;
+    };
+
+    const onTouchEnd = () => {
+      const touch = touchRef.current;
+      if (!touch) return;
+      if (!touch.active) touchTapRef.current(touch.key);
+      cancelTouch();
+    };
+
+    const onPointerUp = () => {
+      calendarDragRef.current = null;
+    };
+
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", onTouchEnd);
+    document.addEventListener("touchcancel", cancelTouch);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("touchcancel", cancelTouch);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
 
   const calendarDates = useMemo(() => {
     const firstOfMonth = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
@@ -114,6 +188,52 @@ export function CreatePollPage() {
       return [...prev, key].sort();
     });
   }
+
+  // 드래그 선택: 시작 날짜가 이미 선택돼 있으면 지우기 모드, 아니면 선택 모드로 지나간 날짜에 적용한다.
+  function dragSelectDate(key: string) {
+    const drag = calendarDragRef.current;
+    if (!drag || key < todayKey) return;
+    const current = selDatesRef.current;
+    const has = current.includes(key);
+    if (drag.erase) {
+      if (has) setSelDates(current.filter((d) => d !== key));
+      return;
+    }
+    if (has) return;
+    if (current.length >= 7) {
+      setDateWarning("날짜는 최대 7개까지 선택할 수 있어요");
+      return;
+    }
+    setSelDates([...current, key].sort());
+  }
+
+  function beginCalendarDrag(key: string) {
+    setDateWarning("");
+    calendarDragRef.current = { erase: selDatesRef.current.includes(key) };
+    dragSelectDate(key);
+  }
+
+  function handleCalendarTouchStart(e: React.TouchEvent, key: string) {
+    if (touchRef.current) {
+      clearTimeout(touchRef.current.timer);
+      touchRef.current = null;
+    }
+    const t = e.touches[0];
+    if (!t || e.touches.length > 1) return;
+
+    const timer = setTimeout(() => {
+      const touch = touchRef.current;
+      if (!touch || touch.key !== key) return;
+      touch.active = true;
+      navigator.vibrate?.(10);
+      touchBeginRef.current(key);
+    }, longPressMs);
+    touchRef.current = { x: t.clientX, y: t.clientY, key, timer, active: false };
+  }
+
+  touchTapRef.current = toggleSelection;
+  touchBeginRef.current = beginCalendarDrag;
+  touchDragRef.current = dragSelectDate;
 
   function setDurationHours(hours: number) {
     setFDur(validDuration(hours, durationMinutes));
@@ -304,7 +424,17 @@ export function CreatePollPage() {
                     </div>
                   ))}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 4 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                    gap: 4,
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    WebkitTouchCallout: "none",
+                    touchAction: "manipulation",
+                  }}
+                >
                   {calendarDates.map((d) => {
                     const key = dateKey(d);
                     const selected = selDates.includes(key);
@@ -315,7 +445,23 @@ export function CreatePollPage() {
                       <button
                         type="button"
                         key={key}
-                        onClick={() => toggleSelection(key)}
+                        data-date-key={key}
+                        onPointerDown={(e) => {
+                          if (e.pointerType === "mouse" && e.button === 0) {
+                            e.preventDefault();
+                            beginCalendarDrag(key);
+                          }
+                        }}
+                        onPointerEnter={(e) => {
+                          if (e.pointerType === "mouse") dragSelectDate(key);
+                        }}
+                        onTouchStart={(e) => handleCalendarTouchStart(e, key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleSelection(key);
+                          }
+                        }}
                         disabled={isPast}
                         aria-pressed={selected}
                         style={{
