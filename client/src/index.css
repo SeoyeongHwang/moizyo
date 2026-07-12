@@ -412,8 +412,8 @@ a:hover {
   align-self: stretch;
 }
 
-.time-detail-card {
-  position: relative;
+.time-detail-card,
+.time-detail-sheet {
   --time-detail-bg: transparent;
   --time-detail-border: var(--color-hairline);
   --time-detail-ink: var(--color-ink);
@@ -430,6 +430,10 @@ a:hover {
   --time-detail-warn-bg: var(--color-warn-bg);
   --time-detail-warn-border: rgba(221, 91, 0, 0.12);
   --time-detail-warn-text: var(--color-warn-text);
+}
+
+.time-detail-card {
+  position: relative;
 }
 
 .time-detail-card::before {
