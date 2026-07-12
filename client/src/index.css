@@ -389,6 +389,21 @@ a:hover {
   transition-duration: 240ms;
 }
 
+.results-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 767px) {
+  .results-header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .results-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);

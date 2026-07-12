@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { deleteResponse, getResults, updatePoll } from "../lib/api";
 import type { ResponseEntry } from "../lib/api";
@@ -505,7 +505,7 @@ export function ResultsPage() {
               <span>{durationText}</span>{" "}<span>{pollTitle(poll)}</span>
               <span>,<br></br>언제 모일까요?</span>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+            <div className="results-header-actions">
               <SecondaryButton
                 onClick={() => copyText(pollJoinLink(poll.id), () => showToast("링크를 복사했어요"))}
                 style={{ flex: "none", whiteSpace: "nowrap", padding: "10px 20px", fontSize: 16, fontWeight: 600, minHeight: 44 }}
@@ -522,9 +522,11 @@ export function ResultsPage() {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ ...metaText, ...tabularNumberStyle }}>{responseCountText(total)}</div>
-            <button type="button" onClick={() => setDurationEditorOpen(true)} className="chip-button">
-              소요 시간 수정
-            </button>
+            {visibleTotal === 0 && (
+              <button type="button" onClick={() => setDurationEditorOpen(true)} className="chip-button">
+                소요 시간 수정
+              </button>
+            )}
           </div>
         </div>
 
@@ -539,6 +541,11 @@ export function ResultsPage() {
               updating={recommendationsUpdating}
               onSelect={selectRecommendation}
               onShare={onShareRecommendation}
+              headingAction={
+                <button type="button" onClick={() => setDurationEditorOpen(true)} className="chip-button">
+                  소요 시간 수정
+                </button>
+              }
             />
           </div>
 
@@ -887,6 +894,7 @@ function RecommendationCarousel({
   updating,
   onSelect,
   onShare,
+  headingAction,
 }: {
   recommendations: Candidate[];
   activeIdx: number;
@@ -895,6 +903,7 @@ function RecommendationCarousel({
   updating: boolean;
   onSelect: (idx: number) => void;
   onShare: (idx: number) => void;
+  headingAction?: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const helpRef = useRef<HTMLDivElement | null>(null);
@@ -997,6 +1006,7 @@ function RecommendationCarousel({
               </div>
             )}
           </div>
+          {headingAction ? <div style={{ marginLeft: "auto", flex: "none" }}>{headingAction}</div> : null}
         </div>
       </div>
 
