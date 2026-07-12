@@ -5,7 +5,7 @@ import { PrimaryButton } from "../components/ui";
 import { captionText, card, fieldLabel, pagePadding, pageTitle, textInput } from "../components/uiStyles";
 
 const DURATION_HOURS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-const DURATION_MINUTES = [0, 30];
+const DURATION_MINUTES = [0, 15, 30, 45];
 const START_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
 const END_HOURS = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
