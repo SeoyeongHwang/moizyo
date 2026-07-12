@@ -136,6 +136,51 @@ export function RespondPage() {
   }, []);
 
   useEffect(() => {
+    // 드래그 페인트 중에는 스크롤이 막히므로, 손가락이 화면 가장자리에 닿으면 자동으로 스크롤한다.
+    let edgeScrollVelocity = 0;
+    let edgeScrollFrame: number | undefined;
+    let lastTouchPoint: { x: number; y: number } | null = null;
+
+    const stepEdgeScroll = () => {
+      if (!edgeScrollVelocity || !touchRef.current?.active) {
+        edgeScrollFrame = undefined;
+        return;
+      }
+      window.scrollBy(0, edgeScrollVelocity);
+      // 스크롤로 손가락 아래의 셀이 바뀌므로 마지막 터치 좌표 기준으로 다시 칠한다.
+      if (lastTouchPoint) {
+        const key = (document.elementFromPoint(lastTouchPoint.x, lastTouchPoint.y) as HTMLElement | null)?.dataset.key;
+        if (key) touchEnterRef.current(key);
+      }
+      edgeScrollFrame = requestAnimationFrame(stepEdgeScroll);
+    };
+
+    const updateEdgeScroll = (t: Touch) => {
+      lastTouchPoint = { x: t.clientX, y: t.clientY };
+      const topZone = 90;
+      const bottomZone = 150; // 하단 고정 바 위쪽까지 트리거 영역으로 잡는다.
+      const viewportHeight = window.innerHeight;
+      if (t.clientY < topZone) {
+        edgeScrollVelocity = -Math.ceil((topZone - t.clientY) / 6);
+      } else if (t.clientY > viewportHeight - bottomZone) {
+        edgeScrollVelocity = Math.ceil((t.clientY - (viewportHeight - bottomZone)) / 6);
+      } else {
+        edgeScrollVelocity = 0;
+      }
+      if (edgeScrollVelocity && edgeScrollFrame === undefined) {
+        edgeScrollFrame = requestAnimationFrame(stepEdgeScroll);
+      }
+    };
+
+    const stopEdgeScroll = () => {
+      edgeScrollVelocity = 0;
+      lastTouchPoint = null;
+      if (edgeScrollFrame !== undefined) {
+        cancelAnimationFrame(edgeScrollFrame);
+        edgeScrollFrame = undefined;
+      }
+    };
+
     // React의 touchmove는 passive로 등록되므로, 스크롤 차단을 위해 native 리스너를 사용한다.
     const onTouchMove = (e: TouchEvent) => {
       const touch = touchRef.current;
@@ -146,6 +191,7 @@ export function RespondPage() {
         e.preventDefault();
         const key = touchedKey(t);
         if (key) touchEnterRef.current(key);
+        updateEdgeScroll(t);
         return;
       }
 
@@ -156,6 +202,7 @@ export function RespondPage() {
     };
 
     const cancelTouch = () => {
+      stopEdgeScroll();
       const touch = touchRef.current;
       if (!touch) return;
       clearTimeout(touch.timer);
@@ -173,6 +220,7 @@ export function RespondPage() {
     document.addEventListener("touchend", onTouchEnd);
     document.addEventListener("touchcancel", cancelTouch);
     return () => {
+      stopEdgeScroll();
       document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("touchend", onTouchEnd);
       document.removeEventListener("touchcancel", cancelTouch);
@@ -316,6 +364,7 @@ export function RespondPage() {
 
   const segBase = {
     border: "none",
+    minHeight: 44,
     padding: "8px 16px",
     fontSize: 15,
     fontWeight: 600,
@@ -471,7 +520,7 @@ export function RespondPage() {
           <div style={{ flex: "1 1 180px", ...metaText }}>
             {markedCount ? `` : "아직 선택한 시간이 없어요"}
           </div>
-          <PrimaryButton onClick={onPrimaryAction} disabled={!markedCount || submitting}>
+          <PrimaryButton onClick={onPrimaryAction} disabled={!markedCount || submitting} style={{ minHeight: 48 }}>
             {primaryActionLabel}
           </PrimaryButton>
         </div>

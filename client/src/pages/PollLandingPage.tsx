@@ -86,6 +86,7 @@ export function PollLandingPage() {
                   style={{
                     ...textInput,
                     flex: 1,
+                    alignSelf: "center",
                     background: "var(--color-canvas-soft)",
                     color: "var(--color-ink-secondary)",
                     overflow: "hidden",

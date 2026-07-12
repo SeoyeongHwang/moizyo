@@ -28,7 +28,7 @@ export const fieldLabel: CSSProperties = {
 };
 
 export const pageTitle: CSSProperties = {
-  fontSize: 40,
+  fontSize: "clamp(28px, 7vw, 40px)",
   fontWeight: 700,
   lineHeight: 1.15,
   letterSpacing: 0,

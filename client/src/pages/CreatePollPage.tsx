@@ -216,7 +216,7 @@ export function CreatePollPage() {
                     onClick={() => switchDateMode(mode)}
                     aria-pressed={selected}
                     style={{
-                      minHeight: 40,
+                      minHeight: 44,
                       borderRadius: "var(--radius-md)",
                       border: "1px solid " + (selected ? "var(--color-primary-ring)" : "var(--color-hairline)"),
                       background: selected ? "var(--color-primary-soft)" : "#ffffff",
@@ -250,8 +250,8 @@ export function CreatePollPage() {
                     disabled={!canGoPrevMonth}
                     aria-label="이전 달"
                     style={{
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       borderRadius: "var(--radius-full)",
                       border: "1px solid var(--color-hairline)",
                       background: "#ffffff",
@@ -271,8 +271,8 @@ export function CreatePollPage() {
                     onClick={() => setMonthCursor((prev) => addMonths(prev, 1))}
                     aria-label="다음 달"
                     style={{
-                      width: 40,
-                      height: 40,
+                      width: 44,
+                      height: 44,
                       borderRadius: "var(--radius-full)",
                       border: "1px solid var(--color-hairline)",
                       background: "#ffffff",
@@ -320,7 +320,7 @@ export function CreatePollPage() {
                         aria-pressed={selected}
                         style={{
                           minWidth: 0,
-                          minHeight: 40,
+                          minHeight: 44,
                           border: "none",
                           borderRadius: "var(--radius-md)",
                           background: selected ? "var(--color-primary-soft)" : "transparent",

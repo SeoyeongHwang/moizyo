@@ -31,6 +31,8 @@ import {
   timetableGridColumns as buildTimetableGridColumns,
   timetableLayerZIndex,
   timetableSlotHeight,
+  timetableTouchSlotHeight,
+  useIsCoarsePointer,
 } from "../lib/timetable";
 import { AccordionPanel } from "../components/AccordionPanel";
 import { ScrollButton, TimetableScrollFrame } from "../components/TimetableScrollFrame";
@@ -146,8 +148,12 @@ export function ResultsPage() {
   const [responseEditorOpen, setResponseEditorOpen] = useState(false);
   const [selectedResponseIds, setSelectedResponseIds] = useState<number[]>([]);
   const [deletingResponses, setDeletingResponses] = useState(false);
+  const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const recommendationUpdateIdRef = useRef(0);
   const recommendationUpdateTimerRef = useRef<number | undefined>(undefined);
+  const detailSheetRef = useRef<HTMLDivElement | null>(null);
+  const pendingCellRevealRef = useRef<DOMRect | null>(null);
+  const isCoarsePointer = useIsCoarsePointer();
 
   const refetch = useCallback(async () => {
     if (!id) return;
@@ -252,6 +258,32 @@ export function ResultsPage() {
   }, [responseEditorOpen, deletingResponses]);
 
   useEffect(() => {
+    if (!detailSheetOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setDetailSheetOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [detailSheetOpen]);
+
+  // 탭한 셀이 시트에 가려지면 셀이 시트 위로 오도록 페이지를 스크롤한다.
+  useEffect(() => {
+    if (!detailSheetOpen) return;
+    const cellRect = pendingCellRevealRef.current;
+    pendingCellRevealRef.current = null;
+    if (!cellRect) return;
+    const frame = requestAnimationFrame(() => {
+      const sheet = detailSheetRef.current;
+      if (!sheet) return;
+      // 등장 애니메이션(transform) 중에도 어긋나지 않도록 시트의 최종 위치 기준으로 계산한다.
+      const sheetTop = window.innerHeight - sheet.offsetHeight;
+      const overlap = cellRect.bottom - (sheetTop - 8);
+      if (overlap > 0) window.scrollBy({ top: overlap, behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailSheetOpen, detailKey]);
+
+  useEffect(() => {
     return () => {
       if (recommendationUpdateTimerRef.current !== undefined) {
         window.clearTimeout(recommendationUpdateTimerRef.current);
@@ -269,6 +301,7 @@ export function ResultsPage() {
   if (!poll) return null;
 
   const sl = slots(poll);
+  const slotHeight = isCoarsePointer ? timetableTouchSlotHeight : timetableSlotHeight;
   const map = aggregate(responses);
   const names = participantNames;
   const req = activeRequiredNames;
@@ -401,6 +434,9 @@ export function ResultsPage() {
     name,
     status: de ? (de.best.includes(name) || de.ok.includes(name) ? "available" : "unavailable") : "neutral",
   }));
+  const detailAvailableCount = detailPeople.filter((person) => person.status === "available").length;
+  // 터치 기기에서는 선택 시간 상세를 바텀시트가 맡으므로, 카드는 중립 상태의 응답자 명단만 보여준다.
+  const rosterPeople: DetailPerson[] = names.map((name) => ({ name, status: "neutral" }));
 
   const finalIdx = poll.final
     ? visibleRecs.findIndex((c) => c.date === poll.final!.date && c.startMin === poll.final!.startMin && c.endMin === poll.final!.endMin)
@@ -431,6 +467,14 @@ export function ResultsPage() {
     }, [])
   );
 
+  function showSlotDetail(key: string, cell: HTMLElement) {
+    setDetailKey(key);
+    // 터치 기기에서는 상세 카드가 시간표 아래(폴드 밖)에 있으므로, 바텀시트로 즉시 보여준다.
+    if (!isCoarsePointer) return;
+    pendingCellRevealRef.current = cell.getBoundingClientRect();
+    setDetailSheetOpen(true);
+  }
+
   function selectRecommendation(idx: number) {
     if (recommendationsUpdating) return;
     const candidate = visibleRecs[idx];
@@ -449,8 +493,11 @@ export function ResultsPage() {
     setMessageModalOpen(true);
   }
 
+  const detailSheetVisible = isCoarsePointer && detailSheetOpen && detailTitle !== null;
+
   return (
-    <div style={{ ...pagePadding, padding: "36px 20px 100px" }}>
+    // 시트가 떠 있는 동안에도 페이지 하단 콘텐츠가 스크롤로 닿을 수 있도록 하단 패딩을 늘린다.
+    <div style={{ ...pagePadding, padding: detailSheetVisible ? "36px 20px 320px" : "36px 20px 100px" }}>
       <div style={{ width: "100%", maxWidth: 1040 }}>
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
@@ -475,30 +522,7 @@ export function ResultsPage() {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 10 }}>
             <div style={{ ...metaText, ...tabularNumberStyle }}>{responseCountText(total)}</div>
-            <button
-              type="button"
-              onClick={() => setDurationEditorOpen(true)}
-              style={{
-                minHeight: 32,
-                border: "1px solid var(--color-hairline)",
-                borderRadius: "var(--radius-full)",
-                background: "#fff",
-                color: "var(--color-ink-muted)",
-                padding: "5px 12px",
-                fontSize: 14,
-                fontWeight: 600,
-                lineHeight: 1.35,
-                letterSpacing: 0,
-                cursor: "pointer",
-                flex: "none",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "var(--color-canvas-soft)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "#fff";
-              }}
-            >
+            <button type="button" onClick={() => setDurationEditorOpen(true)} className="chip-button">
               소요 시간 수정
             </button>
           </div>
@@ -549,9 +573,9 @@ export function ResultsPage() {
                               <div
                                 key={key}
                                 onMouseEnter={() => setDetailKey(key)}
-                                onClick={() => setDetailKey(key)}
+                                onClick={(e) => showSlotDetail(key, e.currentTarget)}
                                 style={{
-                                  ...timetableCellFrameStyle(m),
+                                  ...timetableCellFrameStyle(m, slotHeight),
                                   position: "relative",
                                   cursor: "pointer",
                                   background: bg,
@@ -576,10 +600,10 @@ export function ResultsPage() {
                             aria-hidden="true"
                             style={{
                               position: "absolute",
-                              top: startIndex * timetableSlotHeight,
+                              top: startIndex * slotHeight,
                               left: 0,
                               right: 0,
-                              height: slotCount * timetableSlotHeight,
+                              height: slotCount * slotHeight,
                               display: "grid",
                               gridTemplateColumns: timetableGridColumns,
                               pointerEvents: "none",
@@ -625,10 +649,10 @@ export function ResultsPage() {
                             aria-hidden="true"
                             style={{
                               position: "absolute",
-                              top: startIndex * timetableSlotHeight,
+                              top: startIndex * slotHeight,
                               left: 0,
                               right: 0,
-                              height: slotCount * timetableSlotHeight,
+                              height: slotCount * slotHeight,
                               display: "grid",
                               gridTemplateColumns: timetableGridColumns,
                               pointerEvents: "none",
@@ -708,54 +732,33 @@ export function ResultsPage() {
                   padding: "0 0 4px",
                 }}
               >
-                <div
-                  style={
-                    detailTitle
-                      ? { fontSize: 19, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0, color: "var(--time-detail-ink)", textWrap: "balance" as const }
-                      : { ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }
-                  }
-                >
-                  {detailTitle ? (
-                    <>
-                      <span>{detailTitle.date}</span>{" "}
-                      <span style={tabularNumberStyle}>{detailTitle.time}</span>
-                    </>
-                  ) : (
-                    detailPanelTime
-                  )}
-                </div>
+                {!isCoarsePointer && (
+                  <div
+                    style={
+                      detailTitle
+                        ? { fontSize: 19, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0, color: "var(--time-detail-ink)", textWrap: "balance" as const }
+                        : { ...metaText, color: "var(--time-detail-muted)", fontWeight: 500 }
+                    }
+                  >
+                    {detailTitle ? (
+                      <>
+                        <span>{detailTitle.date}</span>{" "}
+                        <span style={tabularNumberStyle}>{detailTitle.time}</span>
+                      </>
+                    ) : (
+                      detailPanelTime
+                    )}
+                  </div>
+                )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <div style={{ ...captionText, color: "var(--time-detail-ink)", fontWeight: 700 }}>
                     응답자
                   </div>
-                  <button
-                    type="button"
-                    onClick={openResponseEditor}
-                    style={{
-                      minHeight: 32,
-                      border: "1px solid var(--color-hairline)",
-                      borderRadius: "var(--radius-full)",
-                      background: "#fff",
-                      color: "var(--color-ink-muted)",
-                      padding: "5px 12px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                      lineHeight: 1.35,
-                      letterSpacing: 0,
-                      cursor: "pointer",
-                      flex: "none",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "var(--color-canvas-soft)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "#fff";
-                    }}
-                  >
+                  <button type="button" onClick={openResponseEditor} className="chip-button">
                     관리
                   </button>
                 </div>
-                <NameChips people={detailPeople} />
+                <NameChips people={isCoarsePointer ? rosterPeople : detailPeople} />
               </div>
 
               <div style={accordionCard}>
@@ -775,12 +778,7 @@ export function ResultsPage() {
                     {names.map((n) => {
                       const checked = req.includes(n);
                       return (
-                        <label
-                          key={n}
-                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px", borderRadius: 5, cursor: "pointer", fontSize: 16, lineHeight: 1.45, letterSpacing: 0 }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-canvas-soft)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                        >
+                        <label key={n} className="checkbox-row">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -805,6 +803,45 @@ export function ResultsPage() {
           </div>
         )}
       </div>
+      {detailSheetVisible && (
+        <div ref={detailSheetRef} className="time-detail-sheet" role="region" aria-label="선택한 시간의 응답 상세">
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.35, letterSpacing: 0 }}>
+                <span>{detailTitle.date}</span>{" "}
+                <span style={tabularNumberStyle}>{detailTitle.time}</span>
+              </div>
+              <div style={{ ...captionText, marginTop: 2, ...tabularNumberStyle }}>
+                {names.length ? `${names.length}명 중 ${detailAvailableCount}명 가능` : "아직 응답이 없어요"}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="시간 상세 닫기"
+              onClick={() => setDetailSheetOpen(false)}
+              style={{
+                width: 44,
+                height: 44,
+                margin: "-8px -12px 0 0",
+                border: "none",
+                borderRadius: "var(--radius-full)",
+                background: "transparent",
+                color: "var(--color-ink-muted)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flex: "none",
+                cursor: "pointer",
+              }}
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
+          <div className="time-detail-sheet__chips">
+            <NameChips people={detailPeople} />
+          </div>
+        </div>
+      )}
       {poll.final && messageModalOpen && (
         <ConfirmationMessageModal
           message={msgText}
@@ -1226,7 +1263,7 @@ function ConfirmationMessageModal({
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(100%, 560px)",
-          maxHeight: "min(720px, calc(100vh - 40px))",
+          maxHeight: "min(720px, calc(100dvh - 40px))",
           display: "flex",
           flexDirection: "column",
           background: "var(--color-surface)",
@@ -1250,8 +1287,8 @@ function ConfirmationMessageModal({
             aria-label="닫기"
             onClick={onClose}
             style={{
-              width: 40,
-              height: 40,
+              width: 44,
+              height: 44,
               border: 0,
               borderRadius: "var(--radius-full)",
               background: "transparent",
@@ -1339,7 +1376,7 @@ function MeetingDurationEditorModal({
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(100%, 420px)",
-          maxHeight: "min(640px, calc(100vh - 40px))",
+          maxHeight: "min(640px, calc(100dvh - 40px))",
           display: "flex",
           flexDirection: "column",
           background: "var(--color-surface)",
@@ -1513,7 +1550,7 @@ function ResponseEditorModal({
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(100%, 420px)",
-          maxHeight: "min(640px, calc(100vh - 40px))",
+          maxHeight: "min(640px, calc(100dvh - 40px))",
           display: "flex",
           flexDirection: "column",
           background: "var(--color-surface)",

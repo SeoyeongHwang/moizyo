@@ -127,32 +127,44 @@ export function ScrollButton({
       disabled={disabled}
       onClick={onClick}
       style={{
-        width: 36,
-        height: 36,
-        borderRadius: "var(--radius-full)",
+        // 시각 크기는 36px을 유지하되 터치 히트 영역은 44px을 확보한다.
+        width: 44,
+        height: 44,
         border: "none",
         padding: 0,
-        background: "rgba(255,255,255,0.74)",
-        boxShadow: "0 1px 6px rgba(0,0,0,0.12)",
+        background: "transparent",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         flex: "none",
-        backdropFilter: "blur(6px)",
         color: "inherit",
         cursor: disabled ? "default" : "pointer",
         pointerEvents: disabled ? "none" : "auto",
       }}
     >
-      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: 18, height: 18, display: "block" }}>
-        <path
-          d={direction === "left" ? "M9.8 3.8 5.6 8l4.2 4.2" : "M6.2 3.8 10.4 8l-4.2 4.2"}
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <span
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: "var(--radius-full)",
+          background: "rgba(255,255,255,0.74)",
+          boxShadow: "0 1px 6px rgba(0,0,0,0.12)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style={{ width: 18, height: 18, display: "block" }}>
+          <path
+            d={direction === "left" ? "M9.8 3.8 5.6 8l4.2 4.2" : "M6.2 3.8 10.4 8l-4.2 4.2"}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
     </button>
   );
 }
